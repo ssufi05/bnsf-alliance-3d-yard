@@ -1,0 +1,1064 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>BNSF Alliance 3D Yard</title>
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"
+    />
+    <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+    <link
+      href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --glass: rgba(255, 255, 255, 0.78);
+        --glass-solid: #fff;
+        --text: #1c1c1e;
+        --text2: #6e6e73;
+        --line: rgba(0, 0, 0, 0.08);
+        --hover: rgba(0, 0, 0, 0.06);
+        --accent: #0a84ff;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 6px 24px rgba(0, 0, 0, 0.14);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --glass: rgba(44, 44, 46, 0.78);
+          --glass-solid: #2c2c2e;
+          --text: #f5f5f7;
+          --text2: #98989d;
+          --line: rgba(255, 255, 255, 0.12);
+          --hover: rgba(255, 255, 255, 0.1);
+        }
+      }
+      html,
+      body,
+      #map {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font:
+          14px/1.35 -apple-system,
+          BlinkMacSystemFont,
+          "SF Pro Text",
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        border: 0;
+        background: none;
+        padding: 0;
+      }
+      button:focus-visible,
+      .chip:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .glass {
+        background: var(--glass);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        box-shadow: var(--shadow);
+        border: 0.5px solid var(--line);
+      }
+
+      /* top-left pill: hamburger + title */
+      #top {
+        position: absolute;
+        top: calc(12px + env(safe-area-inset-top));
+        left: 12px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 44px;
+        padding: 0 16px 0 4px;
+        border-radius: 22px;
+      }
+      #top .ttl {
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+      }
+      .ib {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        transition: background 0.15s;
+      }
+      .ib:hover {
+        background: var(--hover);
+      }
+      .ib svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* side sheet */
+      #sheet {
+        position: absolute;
+        top: calc(66px + env(safe-area-inset-top));
+        left: 12px;
+        width: 300px;
+        max-height: calc(100% - 90px - env(safe-area-inset-top));
+        overflow: auto;
+        border-radius: 18px;
+        padding: 6px 0 10px;
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+        transform-origin: top left;
+        pointer-events: none;
+        transition:
+          opacity 0.18s,
+          transform 0.18s;
+      }
+      #sheet.open {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .sec {
+        padding: 10px 16px 4px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .sec h4 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text2);
+      }
+      .link {
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 7px 16px;
+        cursor: pointer;
+      }
+      .row:hover {
+        background: var(--hover);
+      }
+      .row.leg {
+        cursor: default;
+        justify-content: flex-start;
+        gap: 10px;
+      }
+      .row.leg:hover {
+        background: none;
+      }
+      .sw {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+        flex: none;
+      }
+      hr {
+        border: 0;
+        border-top: 0.5px solid var(--line);
+        margin: 8px 16px 2px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 4px 16px 6px;
+      }
+      .chip {
+        padding: 5px 12px;
+        border-radius: 14px;
+        background: var(--hover);
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .chip:hover {
+        background: var(--accent);
+        color: #fff;
+      }
+      /* iOS-style switch */
+      .sw-t {
+        position: relative;
+        width: 38px;
+        height: 22px;
+        flex: none;
+      }
+      .sw-t input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        margin: 0;
+        cursor: pointer;
+      }
+      .sw-t i {
+        position: absolute;
+        inset: 0;
+        border-radius: 11px;
+        background: rgba(120, 120, 128, 0.32);
+        transition: background 0.2s;
+        pointer-events: none;
+      }
+      .sw-t i::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        transition: transform 0.2s;
+      }
+      .sw-t input:checked + i {
+        background: #34c759;
+      }
+      .sw-t input:checked + i::after {
+        transform: translateX(16px);
+      }
+      .sw-t input:focus-visible + i {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      /* right-hand control stack */
+      #ctl {
+        position: absolute;
+        right: 12px;
+        top: calc(12px + env(safe-area-inset-top));
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .grp {
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .grp button {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        transition: background 0.15s;
+      }
+      .grp button:hover {
+        background: var(--hover);
+      }
+      .grp button + button {
+        border-top: 0.5px solid var(--line);
+      }
+      .grp svg {
+        width: 22px;
+        height: 22px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      #tilt {
+        font-weight: 700;
+        font-size: 15px;
+      }
+      #tilt.on {
+        color: var(--accent);
+      }
+      #compass svg {
+        transition: transform 0.1s linear;
+      }
+
+      .maplibregl-popup-content {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: var(--glass-solid);
+        color: var(--text);
+        box-shadow: var(--shadow);
+        font:
+          12px -apple-system,
+          sans-serif;
+      }
+      .maplibregl-popup-tip {
+        display: none;
+      }
+      .maplibregl-popup-close-button {
+        font-size: 18px;
+        color: var(--text2);
+      }
+      .pop td {
+        padding: 1px 10px 1px 0;
+        color: var(--text2);
+      }
+      .pop td b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .pop th {
+        text-align: left;
+        font-size: 13px;
+        padding-bottom: 4px;
+      }
+
+      /* phone: sheet becomes a bottom sheet (starting point for the Apple Maps style mobile layout) */
+      @media (max-width: 600px) {
+        #sheet {
+          top: auto;
+          left: 8px;
+          right: 8px;
+          bottom: calc(8px + env(safe-area-inset-bottom));
+          width: auto;
+          max-height: 55%;
+          border-radius: 20px;
+          transform-origin: bottom center;
+          transform: translateY(16px);
+        }
+        #top .ttl {
+          display: none;
+        }
+        #top {
+          padding-right: 4px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div id="top" class="glass">
+      <button class="ib" id="menu" aria-label="Menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+      </button>
+      <span class="ttl">BNSF Alliance Yard</span>
+    </div>
+
+    <div id="sheet" class="glass" role="dialog" aria-label="Map options"></div>
+
+    <div id="ctl">
+      <div class="grp glass">
+        <button id="compass" aria-label="Reset north">
+          <svg viewBox="0 0 24 24">
+            <g id="needle">
+              <path d="M12 3l3.5 9h-7z" fill="#ff3b30" stroke="none" />
+              <path
+                d="M12 21l3.5-9h-7z"
+                fill="currentColor"
+                stroke="none"
+                opacity=".45"
+              />
+            </g>
+          </svg>
+        </button>
+        <button id="tilt" aria-label="Toggle 3D">3D</button>
+      </div>
+      <div class="grp glass">
+        <button id="zin" aria-label="Zoom in">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
+        <button id="zout" aria-label="Zoom out">
+          <svg viewBox="0 0 24 24"><path d="M5 12h14" /></svg>
+        </button>
+      </div>
+      <div class="grp glass">
+        <button id="home" aria-label="Whole yard">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      // Camera: Google/Apple style. Opens at a 45 deg tilt, rotated -20 deg (north points up-right), and the 3D button toggles flat <-> tilted.
+      const TILT = 45,
+        TILT_CLOSE = 58;
+      const CAM_BEARING = -20; // change this one number to rotate the whole view
+      const map = new maplibregl.Map({
+        container: "map",
+        pitch: TILT,
+        bearing: CAM_BEARING,
+        minPitch: 0,
+        maxPitch: 70,
+        center: [-97.348, 33.004],
+        zoom: 14,
+        dragRotate: true,
+        touchPitch: true,
+        antialias: true,
+        style: {
+          version: 8,
+          glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+          sources: {},
+          layers: [
+            {
+              id: "bg",
+              type: "background",
+              paint: { "background-color": "#ebe7de" },
+            },
+          ],
+        },
+      });
+      // right-drag / ctrl-drag rotates + tilts (like Google Maps); two-finger twist & drag on touch
+      map.touchZoomRotate.enableRotation();
+
+      const SOURCES = [
+        "yard_surface",
+        "grass",
+        "water",
+        "lots",
+        "lot_labels",
+        "roads",
+        "tracks",
+        "rail_points",
+        "gantry_paths",
+        "crossings",
+        "barriers",
+        "buildings",
+        "props",
+        "trees",
+        "spots",
+        "chassis",
+        "containers",
+        "light_poles",
+        "power_line",
+        "cranes",
+      ];
+      const ex = (c, o) => ({
+        "fill-extrusion-color": c,
+        "fill-extrusion-height": ["get", "height_m"],
+        "fill-extrusion-base": o || 0,
+        "fill-extrusion-opacity": 1,
+      });
+      const exu = (c) => ({
+        "fill-extrusion-color": c,
+        "fill-extrusion-height": ["get", "top_m"],
+        "fill-extrusion-base": ["get", "base_m"],
+        "fill-extrusion-opacity": 1,
+      });
+      const zw = (a, b) => ["interpolate", ["linear"], ["zoom"], 13, a, 18, b];
+      const LAYERS = [
+        [
+          "Yard pavement",
+          {
+            id: "yard",
+            type: "fill",
+            source: "yard_surface",
+            paint: { "fill-color": "#d9d8d4" },
+          },
+        ],
+        [
+          "Grass",
+          {
+            id: "grass",
+            type: "fill",
+            source: "grass",
+            paint: { "fill-color": "#cfe4b4" },
+          },
+        ],
+        [
+          "Water",
+          {
+            id: "water",
+            type: "fill",
+            source: "water",
+            paint: { "fill-color": "#a8d3f0" },
+          },
+        ],
+
+        [
+          "Lots",
+          {
+            id: "lots-fill",
+            type: "fill",
+            source: "lots",
+            paint: {
+              "fill-opacity": 0.55,
+              "fill-color": [
+                "match",
+                ["get", "lot_type"],
+                "container",
+                "#e6e6e2",
+                "chassis",
+                "#dfe3d2",
+                "broken_chassis",
+                "#e8d6d2",
+                "#e0e0dc",
+              ],
+            },
+          },
+        ],
+        [
+          "Lots",
+          {
+            id: "lots-line",
+            type: "line",
+            source: "lots",
+            paint: { "line-color": "#fff", "line-width": 1.5 },
+          },
+        ],
+        [
+          "Roads",
+          {
+            id: "roads",
+            type: "fill",
+            source: "roads",
+            paint: { "fill-color": "#fff" },
+          },
+        ],
+        [
+          "Roads",
+          {
+            id: "roads-edge",
+            type: "line",
+            source: "roads",
+            paint: { "line-color": "#c9c7c1", "line-width": 0.6 },
+          },
+        ],
+        [
+          "Tracks",
+          {
+            id: "tracks-bed",
+            type: "line",
+            source: "tracks",
+            paint: { "line-color": "#8e8c88", "line-width": zw(1.5, 5) },
+          },
+        ],
+        [
+          "Tracks",
+          {
+            id: "tracks-ties",
+            type: "line",
+            source: "tracks",
+            paint: {
+              "line-color": "#f5f4f1",
+              "line-width": zw(0.6, 2),
+              "line-dasharray": [1.5, 1.5],
+            },
+          },
+        ],
+        [
+          "Gantry paths",
+          {
+            id: "gantry",
+            type: "line",
+            source: "gantry_paths",
+            paint: { "line-color": "#f5a623", "line-width": 3 },
+          },
+        ],
+        [
+          "Switches / buffer stops",
+          {
+            id: "rail-pts",
+            type: "circle",
+            source: "rail_points",
+            paint: {
+              "circle-radius": 3.5,
+              "circle-color": "#5b5b5b",
+              "circle-stroke-color": "#fff",
+              "circle-stroke-width": 1.2,
+            },
+          },
+        ],
+        [
+          "Crossings",
+          {
+            id: "crossings",
+            type: "circle",
+            source: "crossings",
+            paint: {
+              "circle-radius": 3,
+              "circle-color": "#ff9f0a",
+              "circle-stroke-color": "#fff",
+              "circle-stroke-width": 1,
+            },
+          },
+        ],
+        [
+          "Parking stalls",
+          {
+            id: "stalls",
+            type: "line",
+            source: "spots",
+            paint: { "line-color": "#fff", "line-width": 0.8 },
+          },
+        ],
+        [
+          "Barriers / fences",
+          {
+            id: "barriers",
+            type: "fill-extrusion",
+            source: "barriers",
+            paint: ex("#d6d6d2"),
+          },
+        ],
+        [
+          "Buildings",
+          {
+            id: "buildings",
+            type: "fill-extrusion",
+            source: "buildings",
+            paint: ex([
+              "match",
+              ["get", "source"],
+              "digitized",
+              "#f3d9a4",
+              "#f1ede6",
+            ]),
+          },
+        ],
+        [
+          "Gates, wells, towers",
+          {
+            id: "props",
+            type: "fill-extrusion",
+            source: "props",
+            filter: ["!=", ["get", "kind"], "tower"],
+            paint: ex([
+              "match",
+              ["get", "kind"],
+              "gate",
+              "#e57373",
+              "lift_gate",
+              "#e57373",
+              "petroleum_well",
+              "#9a9a96",
+              "#bdbdb8",
+            ]),
+          },
+        ],
+        [
+          "Trees (simulated)",
+          {
+            id: "trunks",
+            type: "fill-extrusion",
+            source: "trees",
+            filter: ["==", ["get", "part"], "trunk"],
+            paint: ex("#9b7b5a"),
+          },
+        ],
+        [
+          "Trees (simulated)",
+          {
+            id: "canopy",
+            type: "fill-extrusion",
+            source: "trees",
+            filter: ["==", ["get", "part"], "canopy"],
+            paint: ex(
+              [
+                "match",
+                ["get", "shade"],
+                0,
+                "#8fc47a",
+                1,
+                "#7db86a",
+                "#9fd088",
+              ],
+              ["get", "base_m"],
+            ),
+          },
+        ],
+        [
+          "Chassis",
+          {
+            id: "chassis",
+            type: "fill-extrusion",
+            source: "chassis",
+            paint: exu(["coalesce", ["get", "color"], "#1a1a1a"]),
+          },
+        ],
+        [
+          "Containers (simulated)",
+          {
+            id: "containers",
+            type: "fill-extrusion",
+            source: "containers",
+            paint: exu(["coalesce", ["get", "color"], "#bbb"]),
+          },
+        ],
+        [
+          "Light poles",
+          {
+            id: "lights",
+            type: "fill-extrusion",
+            source: "light_poles",
+            paint: exu(["get", "color"]),
+          },
+        ],
+        [
+          "Power line",
+          {
+            id: "powerline",
+            type: "fill-extrusion",
+            source: "power_line",
+            paint: exu(["get", "color"]),
+          },
+        ],
+        [
+          "Lot labels",
+          {
+            id: "lot-labels",
+            type: "symbol",
+            source: "lot_labels",
+            layout: {
+              "text-field": ["get", "lot_name"],
+              "text-font": ["Open Sans Semibold"],
+              "text-size": 13,
+            },
+            paint: {
+              "text-color": "#555",
+              "text-halo-color": "#fff",
+              "text-halo-width": 1.5,
+            },
+          },
+        ],
+      ];
+      LAYERS.find((l) => l[1].id === "trunks")[1].paint[
+        "fill-extrusion-height"
+      ] = ["get", "height_m"];
+      const CLICKABLE = [
+        "containers",
+        "chassis",
+        "buildings",
+        "props",
+        "crossings",
+        "rail-pts",
+        "lots-fill",
+        "roads",
+        "crane-pts",
+      ];
+
+      const LEGEND = [
+        ["#F2F0EA", "J.B. Hunt 53 ft (sim)"],
+        ["#232F3E", "Amazon 53 ft (sim)"],
+        ["#F36F21", "Schneider 53 ft (sim)"],
+        ["#0072CE", "Hub Group 53 ft (sim)"],
+        ["#006B45", "EMP 53 ft (sim)"],
+        ["#00529B", "UMAX 53 ft (sim)"],
+        ["#003DA5", "Swift 53 ft (sim)"],
+        ["#8A8F98", "Other domestic / ocean (sim)"],
+        ["#FFCC00", "MSC (sim)"],
+        ["#42B0D5", "Maersk (sim)"],
+        ["#005BAC", "COSCO (sim)"],
+        ["#003A70", "CMA CGM (sim)"],
+        ["#FF7900", "Hapag-Lloyd (sim)"],
+        ["#E5007D", "ONE (sim)"],
+        ["#00843D", "Evergreen (sim)"],
+        ["#F6442A", "J.B. Hunt chassis"],
+      ];
+
+      const $ = (id) => document.getElementById(id);
+      const sheet = $("sheet"),
+        menu = $("menu");
+      const setSheet = (open) => {
+        sheet.classList.toggle("open", open);
+        menu.setAttribute("aria-expanded", open);
+      };
+      menu.onclick = () => setSheet(!sheet.classList.contains("open"));
+      document.addEventListener(
+        "keydown",
+        (e) => e.key === "Escape" && setSheet(false),
+      );
+
+      // camera controls
+      $("zin").onclick = () => map.zoomIn({ duration: 300 });
+      $("zout").onclick = () => map.zoomOut({ duration: 300 });
+      $("compass").onclick = () => map.easeTo({ bearing: 0, duration: 500 });
+      $("tilt").onclick = () =>
+        map.easeTo({
+          pitch:
+            map.getPitch() > 5 ? 0 : map.getZoom() > 16 ? TILT_CLOSE : TILT,
+          duration: 600,
+        });
+      const sync = () => {
+        $("needle").style.transform = `rotate(${-map.getBearing()}deg)`;
+        $("needle").style.transformOrigin = "12px 12px";
+        const on = map.getPitch() > 5;
+        $("tilt").textContent = on ? "2D" : "3D";
+        $("tilt").classList.toggle("on", on);
+      };
+      map.on("rotate", sync);
+      map.on("pitch", sync);
+      sync();
+
+      // Locomotives: SD60M model by OUTPISTON (CC BY-NC-SA 4.0), drawn with three.js
+      // ---- 3D models (locomotives, cranes) drawn with three.js: one .glb cloned at every point of a geojson ----
+      const poseCrane = (o, p) => {
+        o.rotation.y = -THREE.MathUtils.degToRad(Number(p.heading_deg) || 0);
+        const dx = Number(p.trolley_offset_m) || 0; // slide the trolley assembly across the span
+        if (dx)
+          [
+            "trolley",
+            "operator_cab",
+            "cab_glass",
+            "hoist_ropes",
+            "spreader",
+            "trolley_details",
+          ].forEach((n) => {
+            const part = o.getObjectByName(n);
+            if (part) part.position.x += dx;
+          });
+      };
+
+      async function addModelLayer({ id, glb, data, toggle, pose }) {
+        let fc;
+        try {
+          fc = await (await fetch(data)).json();
+        } catch (e) {
+          console.warn(data + " not loaded", e);
+          return;
+        }
+        if (!fc.features.length) return;
+        const origin = fc.features[0].geometry.coordinates;
+        const mc = maplibregl.MercatorCoordinate.fromLngLat(origin, 0);
+        const sc = mc.meterInMercatorCoordinateUnits();
+        const mLat = 111320,
+          mLng = 111320 * Math.cos((origin[1] * Math.PI) / 180);
+        const layer = {
+          id,
+          type: "custom",
+          renderingMode: "3d",
+          visible: true,
+          onAdd(m, gl) {
+            this.camera = new THREE.Camera();
+            this.scene = new THREE.Scene();
+            this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.0));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+            sun.position.set(-40, 100, 60);
+            this.scene.add(sun);
+            this.renderer = new THREE.WebGLRenderer({
+              canvas: m.getCanvas(),
+              context: gl,
+              antialias: true,
+            });
+            this.renderer.autoClear = false;
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            new THREE.GLTFLoader().load(glb, (gltf) => {
+              fc.features.forEach((f) => {
+                const [lng, lat] = f.geometry.coordinates;
+                const o = gltf.scene.clone(true);
+                o.position.set(
+                  (lng - origin[0]) * mLng,
+                  0,
+                  -(lat - origin[1]) * mLat,
+                );
+                pose(o, f.properties);
+                this.scene.add(o);
+              });
+              m.triggerRepaint();
+            });
+          },
+          render(gl, matrix) {
+            if (!this.visible) return;
+            const l = new THREE.Matrix4()
+              .makeTranslation(mc.x, mc.y, mc.z)
+              .scale(new THREE.Vector3(sc, -sc, sc))
+              .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+            this.camera.projectionMatrix = new THREE.Matrix4()
+              .fromArray(matrix)
+              .multiply(l);
+            this.renderer.resetState();
+            this.renderer.render(this.scene, this.camera);
+          },
+        };
+        map.addLayer(layer);
+        sheet.addEventListener("change", (e) => {
+          if (e.target.id === toggle) {
+            layer.visible = e.target.checked;
+            map.triggerRepaint();
+          }
+        });
+        return layer;
+      }
+
+      function addModels() {
+        addModelLayer({
+          id: "locomotives",
+          glb: "data/models/sd60m.glb",
+          data: "data/locomotives.geojson",
+          toggle: "loco-t",
+          pose: (o, p) => {
+            o.rotation.y = -THREE.MathUtils.degToRad(p.heading_deg);
+          },
+        });
+        addModelLayer({
+          id: "cranes-3d",
+          glb: "data/models/mj1200r_rtg.glb",
+          data: "data/cranes.geojson",
+          toggle: "crane-t",
+          pose: poseCrane,
+        });
+      }
+
+      map.on("load", async () => {
+        map.setLight({
+          anchor: "viewport",
+          color: "#fff",
+          intensity: 0.45,
+          position: [1.4, 210, 40],
+        });
+        SOURCES.forEach((s) =>
+          map.addSource(s, {
+            type: "geojson",
+            data: `data/${s}.geojson?v=${Date.now()}`,
+          }),
+        );
+        LAYERS.forEach(([, spec]) => map.addLayer(spec));
+        map.addLayer({
+          id: "crane-pts",
+          type: "circle",
+          source: "cranes",
+          paint: {
+            "circle-radius": 18,
+            "circle-color": "#f85d13",
+            "circle-opacity": 0.01,
+          },
+        });
+        addModels();
+        const groups = [...new Set(LAYERS.map((l) => l[0]))];
+        sheet.innerHTML =
+          '<div class="sec"><h4>Layers</h4><button class="link" id="all"></button></div>' +
+          groups
+            .map(
+              (g, i) =>
+                `<label class="row"><span>${g}</span><span class="sw-t"><input type="checkbox" data-g="${i}" checked><i></i></span></label>`,
+            )
+            .join("") +
+          '<label class="row"><span>Locomotives</span><span class="sw-t"><input type="checkbox" id="loco-t" checked><i></i></span></label>' +
+          '<label class="row"><span>Cranes</span><span class="sw-t"><input type="checkbox" id="crane-t" checked><i></i></span></label>' +
+          "<hr><div class='sec'><h4>Go to</h4></div>" +
+          '<div class="chips"><button class="chip" data-v="yard">Whole yard</button><button class="chip" data-v="spots">Lot B</button><button class="chip" data-v="buildings">Buildings</button><button class="chip" data-v="water">Pond</button></div>' +
+          "<hr><div class='sec'><h4>Legend</h4></div>" +
+          LEGEND.map(
+            ([c, t]) =>
+              `<div class="row leg"><span class="sw" style="background:${c}"></span>${t}</div>`,
+          ).join("");
+
+        sheet.addEventListener("change", (e) => {
+          if (e.target.id === "crane-t")
+            map.setLayoutProperty(
+              "crane-pts",
+              "visibility",
+              e.target.checked ? "visible" : "none",
+            );
+        });
+
+        const boxes = [...sheet.querySelectorAll("input[data-g]")];
+        const apply = (i, on) =>
+          LAYERS.filter((l) => l[0] === groups[i]).forEach(([, s]) =>
+            map.setLayoutProperty(s.id, "visibility", on ? "visible" : "none"),
+          );
+        const allBtn = $("all");
+        const label = () =>
+          (allBtn.textContent = boxes.every((b) => b.checked)
+            ? "Hide all"
+            : "Show all");
+        label();
+        sheet.onchange = (e) => {
+          if (e.target.dataset.g !== undefined) {
+            apply(+e.target.dataset.g, e.target.checked);
+            label();
+          }
+        };
+        allBtn.onclick = () => {
+          const on = !boxes.every((b) => b.checked);
+          boxes.forEach((b, i) => {
+            b.checked = on;
+            apply(i, on);
+          });
+          label();
+        };
+
+        const meta = await (await fetch("data/meta.json")).json(); // written by export_geojson.py
+        const fly = (c) =>
+          map.flyTo({
+            center: c,
+            zoom: 17.3,
+            pitch: TILT_CLOSE,
+            bearing: CAM_BEARING,
+          });
+        const go = {
+          yard: () =>
+            map.fitBounds(
+              [
+                [meta.yard[0], meta.yard[1]],
+                [meta.yard[2], meta.yard[3]],
+              ],
+              { padding: 60, pitch: TILT, bearing: CAM_BEARING },
+            ),
+          spots: () => fly(meta.spots),
+          buildings: () => fly(meta.buildings),
+          water: () =>
+            map.flyTo({
+              center: meta.water,
+              zoom: 16,
+              pitch: TILT_CLOSE,
+              bearing: 0,
+            }),
+        };
+        sheet.addEventListener("click", (e) => {
+          const v = e.target.dataset.v;
+          if (v) {
+            go[v]();
+            if (innerWidth <= 600) setSheet(false);
+          }
+        });
+        $("home").onclick = go.yard;
+        go.yard();
+
+        map.on("click", (e) => {
+          const f = map.queryRenderedFeatures(e.point, {
+            layers: CLICKABLE,
+          })[0];
+          if (!f) {
+            if (innerWidth <= 600) setSheet(false);
+            return;
+          }
+          const rows = Object.entries(f.properties)
+            .filter(([, v]) => v !== null && v !== "null" && v !== "")
+            .map(([k, v]) => `<tr><td>${k}</td><td><b>${v}</b></td></tr>`)
+            .join("");
+          new maplibregl.Popup({ maxWidth: "280px" })
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `<table class="pop"><tr><th colspan="2">${f.layer.id}</th></tr>${rows}</table>`,
+            )
+            .addTo(map);
+        });
+        CLICKABLE.forEach((id) => {
+          map.on(
+            "mouseenter",
+            id,
+            () => (map.getCanvas().style.cursor = "pointer"),
+          );
+          map.on("mouseleave", id, () => (map.getCanvas().style.cursor = ""));
+        });
+      });
+    </script>
+  </body>
+</html>

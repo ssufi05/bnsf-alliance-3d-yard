@@ -1,0 +1,17 @@
+{
+"type": "FeatureCollection",
+"name": "lot_labels",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"xy_coordinate_resolution": 1e-07,
+"features": [
+{ "type": "Feature", "properties": { "lot_id": "LOTA", "lot_name": "A Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3483545, 32.9918172 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTB", "lot_name": "B Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3451382, 33.0061104 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTC", "lot_name": "C Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3515912, 32.9976513 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTD", "lot_name": "D Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3522234, 32.9995652 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTE", "lot_name": "E Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3484024, 33.0044555 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTG", "lot_name": "G Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3486803, 32.9977856 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTH", "lot_name": "H Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3497962, 33.0085735 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTI", "lot_name": "I LOT" }, "geometry": { "type": "Point", "coordinates": [ -97.351408, 33.0156667 ] } },
+{ "type": "Feature", "properties": { "lot_id": "LOTJ", "lot_name": "J Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3505051, 33.0041002 ] } }
+]
+}

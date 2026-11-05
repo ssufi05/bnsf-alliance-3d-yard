@@ -1,0 +1,8 @@
+# Exclude QGIS files
+*.qgz
+*.qgs
+*.qgd
+*.qgsx
+*.gpkg
+*.gpkg-wal
+*.gpkg-shm
