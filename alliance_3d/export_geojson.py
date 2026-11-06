@@ -210,6 +210,43 @@ st["rotation_deg"] = [heading_of(r) for _, r in st.iterrows()]
 st["text"] = "STOP"
 save(st, "stop_text", ["text", "rotation_deg"])
 
+# ---- oil / hydraulic fluid stains around the crane shop ----
+import random
+
+random.seed(7)
+shop = read("lots")
+shop = shop[shop["lot_id"].astype(str).str.strip().str.lower() == "crane shop"]
+stain_rows = []
+if len(shop):
+    base = unary_union(list(shop.geometry))
+    RINGS, STEP = (
+        14,
+        1.6,
+    )  # 14 rings, 1.6 m apart, so the stain fades out over about 22 m
+    R = RINGS * STEP + 6
+    for i in range(RINGS):
+        stain_rows.append({"kind": "ring", "geometry": base.buffer(i * STEP)})
+    # scattered drips and tracked-out oil that thin out with distance
+    outer = base.buffer(R)
+    minx, miny, maxx, maxy = outer.bounds
+    n = tries = 0
+    while n < 40 and tries < 5000:
+        tries += 1
+        p = Point(random.uniform(minx, maxx), random.uniform(miny, maxy))
+        d = base.distance(p)
+        if d > 0 and d < R and random.random() < 1 - d / R:
+            stain_rows.append(
+                {"kind": "drip", "geometry": p.buffer(random.uniform(0.8, 3.0))}
+            )
+            n += 1
+
+oil = (
+    gpd.GeoDataFrame(stain_rows, geometry="geometry", crs=UTM)
+    if stain_rows
+    else gpd.GeoDataFrame({"kind": []}, geometry="geometry", crs=UTM)
+)
+save(oil, "oil_stain", ["kind"])
+
 # ---- cranes: one POINT per crane (+ heading etc.); the viewer draws the 3D .glb model at each point ----
 import math
 

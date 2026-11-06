@@ -24,6 +24,8 @@
 { "type": "Feature", "properties": { "crane_id": "RTG-18", "model": "mj1200r", "heading_deg": 269.2, "trolley_offset_m": 0.0, "track_id": "7201,7202", "side": "rise" }, "geometry": { "type": "Point", "coordinates": [ -97.350384, 33.0010217 ] } },
 { "type": "Feature", "properties": { "crane_id": "RTG-19", "model": "mj1200r", "heading_deg": 269.2, "trolley_offset_m": 0.0, "track_id": "7201,7202", "side": "rise" }, "geometry": { "type": "Point", "coordinates": [ -97.3503375, 33.0012979 ] } },
 { "type": "Feature", "properties": { "crane_id": "RTG-20", "model": "mj1200r", "heading_deg": 269.2, "trolley_offset_m": 0.0, "track_id": "7201,7202", "side": "rise" }, "geometry": { "type": "Point", "coordinates": [ -97.35047, 33.0012858 ] } },
-{ "type": "Feature", "properties": { "crane_id": "RTG-21", "model": "mj1200r", "heading_deg": 269.2, "trolley_offset_m": 0.0, "track_id": "7201,7202", "side": "rise" }, "geometry": { "type": "Point", "coordinates": [ -97.3506001, 33.0012875 ] } }
+{ "type": "Feature", "properties": { "crane_id": "RTG-21", "model": "mj1200r", "heading_deg": 269.2, "trolley_offset_m": 0.0, "track_id": "7201,7202", "side": "rise" }, "geometry": { "type": "Point", "coordinates": [ -97.3506001, 33.0012875 ] } },
+{ "type": "Feature", "properties": { "crane_id": "RTG-22", "model": "mj1200r", "heading_deg": 179.2, "trolley_offset_m": 0.0, "track_id": "7201,7202", "side": "rise" }, "geometry": { "type": "Point", "coordinates": [ -97.3495302, 33.0006095 ] } },
+{ "type": "Feature", "properties": { "crane_id": "RTG-23", "model": "mj1200r", "heading_deg": 179.2, "trolley_offset_m": 0.0, "track_id": "7201,7202", "side": "rise" }, "geometry": { "type": "Point", "coordinates": [ -97.3495357, 33.0008781 ] } }
 ]
 }
