@@ -9,7 +9,9 @@ import sys
 
 import geopandas as gpd
 import numpy as np
-from shapely.geometry import Point, Polygon
+from shapely.affinity import rotate, translate
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely.ops import unary_union
 
 GPKG = sys.argv[1] if len(sys.argv) > 1 else "../Alliance_Project_Data_v2.gpkg"
 OUT = sys.argv[2] if len(sys.argv) > 2 else "data"
@@ -126,10 +128,16 @@ paths = read("gantry_paths")
 save(paths, "gantry_paths", ["track_id", "side"])
 save(read("crossings"), "crossings", ["name", "crossing_id", "track_id"])
 
-# ---- cranes: one POINT per crane (+ heading etc.); the viewer draws the 3D .glb model at each point ----
-import math
+# ---- STOP signs + railroad-crossing pavement paint (flat on the ground) ----------
+# rotation_deg = compass direction of TRAVEL through the marking (0 = north, 90 = east, ...)
+# Local frame: +x = across the travel direction, +y = along it. Rotated clockwise by rotation_deg.
 
-paths_ok = len(paths) > 0
+CROSSING_LEN = 7.0  # long side of yellow box (runs parallel to the tracks)
+CROSSING_DEPTH = 3.2  # short side (in the direction of travel)
+BORDER_WIDTH = 0.30  # yellow outline thickness
+X_WIDTH = 0.30  # white X stroke thickness
+SIGN_W, SIGN_H = 1.6, 0.9  # red STOP panel
+BAR_H, BAR_GAP = 0.30, 0.25  # white stop bar ahead of the panel
 
 
 def _n(v, default=None):
@@ -138,6 +146,74 @@ def _n(v, default=None):
         return default if f != f else f
     except (TypeError, ValueError):
         return default
+
+
+def place(geom, pt, heading):
+    """Rotate a local-frame shape clockwise by compass heading, then move it onto the point."""
+    return translate(rotate(geom, -heading, origin=(0, 0)), pt.x, pt.y)
+
+
+def heading_of(row):
+    return _n(row.get("rotation_deg"), 0.0) % 360
+
+
+paint_rows = []
+
+# ---- railroad crossings: yellow outline + white X ----
+rc = read("railroad_crossings")
+for _, r in rc.iterrows():
+    if r.geometry is None or r.geometry.is_empty:
+        continue
+    pt, hd = r.geometry, heading_of(r)
+    hx, hy = CROSSING_LEN / 2, CROSSING_DEPTH / 2
+    outer = box(-hx, -hy, hx, hy)
+    inner = box(
+        -hx + BORDER_WIDTH, -hy + BORDER_WIDTH, hx - BORDER_WIDTH, hy - BORDER_WIDTH
+    )
+    ring = Polygon(outer.exterior.coords, [inner.exterior.coords])
+    paint_rows.append({"part": "yellow_border", "geometry": place(ring, pt, hd)})
+
+    m = BORDER_WIDTH * 2
+    d1 = LineString([(-hx + m, -hy + m), (hx - m, hy - m)])
+    d2 = LineString([(-hx + m, hy - m), (hx - m, -hy + m)])
+    white_x = unary_union(
+        [d1.buffer(X_WIDTH / 2, cap_style=2), d2.buffer(X_WIDTH / 2, cap_style=2)]
+    )
+    paint_rows.append({"part": "white_x", "geometry": place(white_x, pt, hd)})
+
+# ---- STOP signs: red panel + white stop bar ahead of it ----
+stop_signs = read("stop_signs")
+for _, r in stop_signs.iterrows():
+    if r.geometry is None or r.geometry.is_empty:
+        continue
+    pt, hd = r.geometry, heading_of(r)
+    panel = box(-SIGN_W / 2, -SIGN_H / 2, SIGN_W / 2, SIGN_H / 2)
+    y0 = SIGN_H / 2 + BAR_GAP
+    bar = box(-SIGN_W / 2, y0, SIGN_W / 2, y0 + BAR_H)
+    paint_rows.append({"part": "stop_panel", "geometry": place(panel, pt, hd)})
+    paint_rows.append({"part": "stop_text", "geometry": place(bar, pt, hd)})
+
+crossing_paint = (
+    gpd.GeoDataFrame(paint_rows, geometry="geometry", crs=UTM)
+    if paint_rows
+    else gpd.GeoDataFrame({"part": []}, geometry="geometry", crs=UTM)
+)
+save(crossing_paint, "crossing_paint", ["part"])
+
+cm = rc.copy()
+cm["rotation_deg"] = [heading_of(r) for _, r in cm.iterrows()]
+save(cm, "crossing_marks", ["rotation_deg"])
+
+# Points for the flat "STOP" lettering (text can't be a polygon fill)
+st = stop_signs.copy()
+st["rotation_deg"] = [heading_of(r) for _, r in st.iterrows()]
+st["text"] = "STOP"
+save(st, "stop_text", ["text", "rotation_deg"])
+
+# ---- cranes: one POINT per crane (+ heading etc.); the viewer draws the 3D .glb model at each point ----
+import math
+
+paths_ok = len(paths) > 0
 
 
 def _s(v):
@@ -303,9 +379,13 @@ w = {
     "residential": 7,
     "service": 6,
 }
+ROAD_WIDTH_SCALE = 1.5  # make every road this many times wider
 rd["width_m"] = rd.highway.map(w).fillna(6)
 rd.loc[rd.service == "parking_aisle", "width_m"] = 5
-rd["geometry"] = rd.geometry.buffer(rd.width_m / 2, cap_style=2)
+rd["width_m"] = rd["width_m"] * ROAD_WIDTH_SCALE
+rd["geometry"] = rd.geometry.buffer(
+    rd.width_m / 2, cap_style=1
+)  # round caps so joints connect cleanly
 save(
     rd,
     "roads",
@@ -320,6 +400,11 @@ save(
         "width_m",
     ],
 )
+# One merged outline for ALL roads, so the edge line only follows the outer boundary
+road_outline = gpd.GeoDataFrame(
+    {"kind": ["road"]}, geometry=[unary_union(rd.geometry)], crs=UTM
+)
+save(road_outline, "roads_outline", ["kind"])
 bar = rq[rq.barrier.notna()].copy()
 bar["height_m"] = bar.barrier.map({"fence": 2.4, "jersey_barrier": 0.8}).fillna(1.0)
 bar["geometry"] = bar.geometry.buffer(0.2, cap_style=2)
@@ -331,7 +416,6 @@ save(read("yard_surface"), "yard_surface", ["name", "surface_type"])
 # build_gpkg.py already filtered these OSM nodes into the "rail_points" and "props" layers.
 import pandas as pd
 import shapely
-from shapely.ops import unary_union
 
 yard = read("yard_surface").union_all()
 rp = read("rail_points")

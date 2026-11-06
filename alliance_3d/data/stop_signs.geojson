@@ -1,0 +1,11 @@
+{
+"type": "FeatureCollection",
+"name": "stop_signs",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"xy_coordinate_resolution": 1e-07,
+"features": [
+{ "type": "Feature", "properties": { "sign_id": null, "rotation_deg": 0.0 }, "geometry": { "type": "Point", "coordinates": [ -97.351187, 33.0062104 ] } },
+{ "type": "Feature", "properties": { "sign_id": null, "rotation_deg": 180.0 }, "geometry": { "type": "Point", "coordinates": [ -97.3516793, 33.0065239 ] } },
+{ "type": "Feature", "properties": { "sign_id": null, "rotation_deg": 0.0 }, "geometry": { "type": "Point", "coordinates": [ -97.3516746, 33.0062068 ] } }
+]
+}

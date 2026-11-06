@@ -525,10 +525,13 @@
         "lots",
         "lot_labels",
         "roads",
+        "roads_outline",
         "tracks",
         "rail_points",
         "gantry_paths",
         "crossings",
+        "crossing_marks",
+        "stop_text",
         "barriers",
         "buildings",
         "props",
@@ -553,6 +556,15 @@
         "fill-extrusion-opacity": 1,
       });
       const zw = (a, b) => ["interpolate", ["linear"], ["zoom"], 13, a, 18, b];
+      const groundSize = (meters, imgPx) => [
+        "interpolate",
+        ["exponential", 2],
+        ["zoom"],
+        15,
+        (0.4992 * meters) / imgPx,
+        22,
+        (63.9 * meters) / imgPx,
+      ];
       const LAYERS = [
         [
           "Yard pavement",
@@ -627,7 +639,7 @@
           {
             id: "roads-edge",
             type: "line",
-            source: "roads",
+            source: "roads_outline",
             paint: { "line-color": "#c9c7c1", "line-width": 0.6 },
           },
         ],
@@ -726,6 +738,43 @@
             type: "line",
             source: "spots",
             paint: { "line-color": "#fff", "line-width": 0.8 },
+          },
+        ],
+
+        [
+          "Road markings",
+          {
+            id: "crossing-icons",
+            type: "symbol",
+            source: "crossing_marks",
+            minzoom: 16,
+            layout: {
+              "icon-image": "crossing_mark",
+              "icon-size": groundSize(3.2, 160),
+              "icon-rotate": ["-", ["get", "rotation_deg"], 90],
+              "icon-pitch-alignment": "map",
+              "icon-rotation-alignment": "map",
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+            },
+          },
+        ],
+        [
+          "Road markings",
+          {
+            id: "stop-icons",
+            type: "symbol",
+            source: "stop_text",
+            minzoom: 16,
+            layout: {
+              "icon-image": "stop_mark",
+              "icon-size": groundSize(1.6, 80),
+              "icon-rotate": ["get", "rotation_deg"],
+              "icon-pitch-alignment": "map",
+              "icon-rotation-alignment": "map",
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+            },
           },
         ],
         [
@@ -1429,6 +1478,32 @@
           intensity: 0.45,
           position: [1.4, 210, 40],
         });
+        // Load pavement marking images
+        for (const n of ["crossing_mark", "stop_mark"]) {
+          const url = `data/icons/${n}.jpg`;
+
+          try {
+            const response = await map.loadImage(url);
+
+            // Support either a MapLibre response wrapper or a direct image
+            const image = response?.data ?? response;
+
+            if (!image) {
+              throw new Error(`Image returned no usable data: ${url}`);
+            }
+
+            if (map.hasImage(n)) {
+              map.removeImage(n);
+            }
+
+            map.addImage(n, image);
+
+            console.log(`Successfully loaded pavement marking: ${url}`);
+          } catch (error) {
+            console.error(`Failed to load pavement marking: ${url}`, error);
+          }
+        }
+
         SOURCES.forEach((s) =>
           map.addSource(s, {
             type: "geojson",
