@@ -12,6 +12,7 @@
 { "type": "Feature", "properties": { "lot_id": "LOTG", "lot_name": "G Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3486803, 32.9977856 ] } },
 { "type": "Feature", "properties": { "lot_id": "LOTH", "lot_name": "H Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3497962, 33.0085735 ] } },
 { "type": "Feature", "properties": { "lot_id": "LOTI", "lot_name": "I LOT" }, "geometry": { "type": "Point", "coordinates": [ -97.351408, 33.0156667 ] } },
-{ "type": "Feature", "properties": { "lot_id": "LOTJ", "lot_name": "J Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3505051, 33.0041002 ] } }
+{ "type": "Feature", "properties": { "lot_id": "LOTJ", "lot_name": "J Lot" }, "geometry": { "type": "Point", "coordinates": [ -97.3505051, 33.0041002 ] } },
+{ "type": "Feature", "properties": { "lot_id": "crane shop", "lot_name": "crane shop" }, "geometry": { "type": "Point", "coordinates": [ -97.3504644, 33.0007676 ] } }
 ]
 }

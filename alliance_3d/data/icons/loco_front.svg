@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="650" viewBox="0 0 600 650">
+  <title>Front view of an orange and black BNSF-style locomotive</title>
+  <desc>Vector illustration based on the supplied front-facing locomotive image, with orange cab, twin windshields, BNSF lettering, headlights, yellow striping, pilot and coupler.</desc>
+  <defs>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d94b0d"/>
+      <stop offset=".22" stop-color="#f45a0b"/>
+      <stop offset=".52" stop-color="#ff6810"/>
+      <stop offset=".82" stop-color="#ef570b"/>
+      <stop offset="1" stop-color="#c9470b"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e5e8e8"/>
+      <stop offset=".58" stop-color="#aeb9bd"/>
+      <stop offset="1" stop-color="#59656b"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#55585a"/>
+      <stop offset=".45" stop-color="#292b2d"/>
+      <stop offset="1" stop-color="#111315"/>
+    </linearGradient>
+    <linearGradient id="pilot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#383b3d"/>
+      <stop offset="1" stop-color="#17191b"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+  </defs>
+
+  <!-- Roof and cab shell -->
+  <path d="M100 102 L133 56 Q151 39 190 34 L410 34 Q449 39 467 56 L500 102 L490 118 L110 118 Z"
+        fill="#a9430d" stroke="#75300d" stroke-width="3"/>
+  <path d="M113 106 L145 65 Q160 51 194 48 L406 48 Q440 51 455 65 L487 106 L480 132 L120 132 Z"
+        fill="url(#orange)" stroke="#b7440c" stroke-width="3"/>
+  <path d="M143 58 Q170 42 204 42 L396 42 Q430 42 457 58 L449 70 L151 70 Z" fill="#f36a19"/>
+
+  <!-- Number boards -->
+  <g font-family="Arial, sans-serif" text-anchor="middle">
+    <rect x="181" y="43" width="72" height="29" rx="2" fill="#171a1b" stroke="#8d4b1b" stroke-width="3"/>
+    <rect x="347" y="43" width="72" height="29" rx="2" fill="#171a1b" stroke="#8d4b1b" stroke-width="3"/>
+    <text x="217" y="65" font-size="21" fill="#ffe46b" letter-spacing="1">3815</text>
+    <text x="383" y="65" font-size="21" fill="#ffe46b" letter-spacing="1">3815</text>
+  </g>
+
+  <!-- Windshield surrounds and windows -->
+  <path d="M132 100 Q137 85 158 83 L266 80 Q282 81 285 96 L284 153 L128 150 Z"
+        fill="#16191b" stroke="#a83e0a" stroke-width="4"/>
+  <path d="M316 96 Q319 81 334 80 L442 83 Q463 85 468 100 L472 150 L316 153 Z"
+        fill="#16191b" stroke="#a83e0a" stroke-width="4"/>
+  <path d="M144 101 Q149 91 164 91 L263 89 Q274 90 276 101 L276 142 L140 140 Z"
+        fill="url(#glass)" stroke="#22282b" stroke-width="2"/>
+  <path d="M324 101 Q326 90 337 89 L436 91 Q451 91 456 101 L460 140 L324 142 Z"
+        fill="url(#glass)" stroke="#22282b" stroke-width="2"/>
+  <path d="M151 101 L266 101 M334 101 L450 101" stroke="#f2f4f2" stroke-opacity=".35" stroke-width="2"/>
+  <path d="M211 93 L211 138 M389 93 L389 138" stroke="#7c898e" stroke-opacity=".4" stroke-width="1.5"/>
+  <!-- Windshield wipers -->
+  <g stroke="#111719" stroke-width="3" stroke-linecap="round">
+    <path d="M175 111 L231 145"/>
+    <path d="M425 111 L369 145"/>
+    <path d="M167 108 L183 119"/>
+    <path d="M433 108 L417 119"/>
+  </g>
+
+  <!-- Main nose body -->
+  <path d="M116 139 L484 139 L478 352 L453 385 L147 385 L122 352 Z"
+        fill="url(#orange)" stroke="#a83c08" stroke-width="3"/>
+  <path d="M116 139 L151 126 L285 118 L315 118 L449 126 L484 139 L470 174 L130 174 Z"
+        fill="#f45b0b"/>
+  <path d="M119 153 L148 143 L285 135 L315 135 L452 143 L481 153 L477 178 L123 178 Z"
+        fill="#f96812" opacity=".55"/>
+
+  <!-- Upper dark brow / windshield lower trim -->
+  <path d="M125 151 L191 132 L283 145 L283 166 L121 187 Z" fill="#111719"/>
+  <path d="M475 151 L409 132 L317 145 L317 166 L479 187 Z" fill="#111719"/>
+  <path d="M126 179 L283 158 M474 179 L317 158" stroke="#34383a" stroke-width="3"/>
+
+  <!-- Central headlight housing -->
+  <rect x="278" y="132" width="44" height="82" rx="8" fill="#d84d0b" stroke="#9d3708" stroke-width="3"/>
+  <rect x="286" y="140" width="28" height="65" rx="13" fill="#f7c928" stroke="#e9a90c" stroke-width="2"/>
+  <circle cx="300" cy="157" r="9" fill="#fff58b"/>
+  <circle cx="300" cy="187" r="9" fill="#fff58b"/>
+  <circle cx="300" cy="157" r="14" fill="#fff5a0" opacity=".16" filter="url(#soft)"/>
+  <circle cx="300" cy="187" r="14" fill="#fff5a0" opacity=".16" filter="url(#soft)"/>
+
+  <!-- Small number/marker plate -->
+  <rect x="342" y="158" width="39" height="42" rx="7" fill="#292d30" stroke="#8c3109" stroke-width="3"/>
+  <path d="M350 193 L370 164" stroke="#c6c9c8" stroke-width="4"/>
+  <path d="M357 196 L376 169" stroke="#8d9699" stroke-width="2"/>
+
+  <!-- BNSF logo lettering -->
+  <g transform="translate(0 0) skewX(-12)">
+    <text x="300" y="252" text-anchor="middle" font-family="Arial Black, Arial, sans-serif"
+          font-size="56" font-weight="900" font-style="italic" letter-spacing="-4"
+          fill="#111315" stroke="#111315" stroke-width="1">BNSF</text>
+  </g>
+  <path d="M160 262 Q300 250 440 262" fill="none" stroke="#101315" stroke-width="8"/>
+  <path d="M164 270 L436 270" stroke="#f8a51b" stroke-width="2" opacity=".7"/>
+
+  <!-- Front handrails and yellow safety details -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M226 267 L226 352 M244 257 L244 352 M356 257 L356 352 M374 267 L374 352"
+          stroke="#e5b51d" stroke-width="7"/>
+    <path d="M218 269 L218 353 M382 269 L382 353" stroke="#171a1b" stroke-width="2"/>
+    <path d="M226 280 L244 280 M356 280 L374 280" stroke="#f5c82c" stroke-width="3"/>
+  </g>
+
+  <!-- Nose side edges -->
+  <path d="M121 184 L130 352 L149 374 L149 184 Z" fill="#f05a0a" opacity=".8"/>
+  <path d="M479 184 L470 352 L451 374 L451 184 Z" fill="#d94b08" opacity=".75"/>
+
+  <!-- Yellow/black horizontal warning stripe -->
+  <path d="M120 318 L480 318 L478 337 L122 337 Z" fill="#101315"/>
+  <path d="M120 316 L480 316" stroke="#f4d21e" stroke-width="6"/>
+  <path d="M123 338 L477 338" stroke="#f4d21e" stroke-width="5"/>
+  <path d="M270 318 L300 329 L330 318" fill="none" stroke="#f4d21e" stroke-width="5"/>
+
+  <!-- Headlight clusters -->
+  <g>
+    <rect x="165" y="320" width="48" height="42" rx="5" fill="#e9a80c" stroke="#242729" stroke-width="4"/>
+    <circle cx="189" cy="341" r="13" fill="#fff05c"/>
+    <circle cx="189" cy="341" r="19" fill="#fff5a0" opacity=".18" filter="url(#soft)"/>
+    <rect x="387" y="320" width="48" height="42" rx="5" fill="#e9a80c" stroke="#242729" stroke-width="4"/>
+    <circle cx="411" cy="341" r="13" fill="#fff05c"/>
+    <circle cx="411" cy="341" r="19" fill="#fff5a0" opacity=".18" filter="url(#soft)"/>
+  </g>
+
+  <!-- Lower nose and pilot -->
+  <path d="M125 350 L475 350 L469 408 L448 433 L152 433 L131 408 Z"
+        fill="url(#metal)" stroke="#16191b" stroke-width="4"/>
+  <path d="M139 365 L461 365 L455 401 L145 401 Z" fill="#25292b" stroke="#55595a" stroke-width="2"/>
+  <path d="M148 406 L452 406 L438 435 L162 435 Z" fill="#191c1e"/>
+
+  <!-- Lower lamps and fittings -->
+  <g>
+    <rect x="157" y="373" width="26" height="37" rx="4" fill="#111416"/>
+    <rect x="417" y="373" width="26" height="37" rx="4" fill="#111416"/>
+    <rect x="235" y="369" width="26" height="27" rx="4" fill="#8a8d84" stroke="#292c2d" stroke-width="2"/>
+    <rect x="339" y="369" width="26" height="27" rx="4" fill="#8a8d84" stroke="#292c2d" stroke-width="2"/>
+    <circle cx="365" cy="383" r="11" fill="#d92d26" stroke="#252729" stroke-width="3"/>
+    <circle cx="235" cy="383" r="8" fill="#c7c9b9"/>
+  </g>
+
+  <!-- Hoses, cables and coupler -->
+  <path d="M262 390 C245 409 255 424 278 426 C298 428 307 414 300 400"
+        fill="none" stroke="#b78b62" stroke-width="3"/>
+  <path d="M324 394 C338 407 336 424 316 429 C300 433 287 423 292 409"
+        fill="none" stroke="#b78b62" stroke-width="3"/>
+  <path d="M197 400 L197 459 M208 402 L208 468 M394 402 L394 459 M405 400 L405 468"
+        stroke="#090b0c" stroke-width="4"/>
+  <path d="M300 421 L300 467" stroke="#111416" stroke-width="8"/>
+  <rect x="275" y="435" width="50" height="51" rx="5" fill="#25211b" stroke="#111416" stroke-width="4"/>
+  <path d="M286 445 L314 445 L320 472 L280 472 Z" fill="#4b3822"/>
+  <path d="M300 455 L300 494" stroke="#17191a" stroke-width="12"/>
+  <path d="M288 488 L312 488 L320 503 L280 503 Z" fill="#292b2b"/>
+
+  <!-- Pilot face / lower plow -->
+  <path d="M126 418 L474 418 L459 500 Q453 518 431 520 L169 520 Q147 518 141 500 Z"
+        fill="url(#pilot)" stroke="#101214" stroke-width="4"/>
+  <path d="M132 425 L468 425 L454 486 L146 486 Z" fill="#35393b" opacity=".8"/>
+  <path d="M150 491 L450 491 L432 520 L168 520 Z" fill="#4a4e50"/>
+  <path d="M168 520 L432 520" stroke="#101214" stroke-width="5"/>
+
+  <!-- Pilot vertical bars and hoses -->
+  <g fill="none" stroke="#0d1011" stroke-width="4">
+    <path d="M190 432 L184 486 M205 431 L200 494 M395 431 L400 494 M410 432 L416 486"/>
+    <path d="M350 432 C355 454 347 474 338 493"/>
+  </g>
+  <path d="M344 495 L337 525" stroke="#d5d0b8" stroke-width="7" stroke-linecap="round"/>
+  <path d="M172 430 L172 492 M428 430 L428 492" stroke="#111416" stroke-width="5"/>
+
+  <!-- Small central safety badge -->
+  <circle cx="300" cy="311" r="5" fill="#f5d32b" stroke="#282a2a" stroke-width="2"/>
+
+  <!-- Side mirror/handrail accents -->
+  <g stroke="#171a1b" stroke-width="3" fill="none">
+    <path d="M129 185 L112 219 L112 270"/>
+    <path d="M471 185 L488 219 L488 270"/>
+    <path d="M112 219 L126 226 M488 219 L474 226"/>
+  </g>
+
+  <!-- Subtle panel seams -->
+  <g stroke="#9e3a0b" stroke-width="1.5" opacity=".7" fill="none">
+    <path d="M145 285 L145 312 M455 285 L455 312"/>
+    <path d="M155 175 L155 190 M445 175 L445 190"/>
+    <path d="M150 382 L150 402 M450 382 L450 402"/>
+  </g>
+</svg>

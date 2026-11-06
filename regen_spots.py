@@ -676,6 +676,104 @@ print(
     f"Locomotives: {len(_locos)} units on {len(set(r['track_id'] for r in _locos))} tracks."
 )
 
+# ---------- well cars: 3-car blocks (well_cars.glb) lined up behind each train ----------
+WELL_BLOCK = 64.8  # length of one well_cars.glb = 3 cars (m)
+WELL_HALF = WELL_BLOCK / 2  # half the length of the car bodies in that block (m)
+WELL_MAX = 65  # most blocks on one track (65 x 3 = 195 well cars)
+WELL_END_MARGIN = 15.0  # stop this far before the end of the track (m)
+WELL_AVOID_CROSSINGS = (
+    False  # True = leave blocks empty where they would sit on a crossing
+)
+WELL_CROSS_BUF = 8.0  # extra clearance around a crossing (m)
+WELL_BLOCKS = {}  # e.g. {"7203": 30} -> only 30 blocks on track 7203
+WELL_SKIP = {}  # e.g. {"7203": [10, 11]} -> leave blocks 10 and 11 empty on 7203
+
+
+def build_well_cars(tracks, locos, crossings, rng_):
+    """One LINE per 3-car block, from its first to its last car, placed end to end behind the rear
+    locomotive of each train. Returns [{track_id, idx, owner, color, geometry}] (UTM metres)."""
+    from shapely.geometry import LineString
+
+    by_track = {}
+    for r in locos:
+        by_track.setdefault(r["track_id"], {}).setdefault(r["train_end"], []).append(r)
+    out = []
+    for tid, coords in tracks:
+        ends = by_track.get(tid)
+        if not ends:
+            continue  # no train on this track -> no cars
+        L = _poly_len(coords)
+        trains = []  # (distance along the track of the REAR unit, direction the cars run)
+        for units in ends.values():
+            ss = [_poly_project(coords, (u["x"], u["y"]))[0] for u in units]
+            at_start = min(ss) < L / 2
+            trains.append((max(ss) if at_start else min(ss), 1 if at_start else -1))
+        trains.sort()
+        mine = trains[0] if trains[0][1] == 1 else trains[-1]
+        rear, d = mine
+        gap = (
+            LOCO_LEN / 2 + LOCO_GAP
+        )  # from the rear unit's centre to the first car body
+        first = rear + d * (gap + WELL_HALF)
+        if len(trains) > 1:  # a train on the other end too (e.g. 7205): stop before it
+            other = trains[-1] if mine == trains[0] else trains[0]
+            limit = other[0] - d * gap
+        else:
+            limit = L - WELL_END_MARGIN if d == 1 else WELL_END_MARGIN
+        cross_along = [
+            s for s, dd in (_poly_project(coords, c) for c in crossings) if dd < 12.0
+        ]
+        k = 0
+        while k < WELL_BLOCKS.get(tid, WELL_MAX):
+            c = first + d * k * WELL_BLOCK
+            far = c + d * WELL_HALF
+            if (d == 1 and far > limit) or (d == -1 and far < limit):
+                break
+            lo, hi = c - WELL_HALF, c + WELL_HALF
+            blocked = WELL_AVOID_CROSSINGS and any(
+                lo - WELL_CROSS_BUF < s < hi + WELL_CROSS_BUF for s in cross_along
+            )
+            if k not in WELL_SKIP.get(tid, []) and not blocked:
+                a, b, m = (
+                    _poly_pt(coords, lo),
+                    _poly_pt(coords, hi),
+                    _poly_pt(coords, c),
+                )
+                sx = (m[0] - (a[0] + b[0]) / 2) / 2
+                sy = (m[1] - (a[1] + b[1]) / 2) / 2
+                owner, color = pick_unit(
+                    53, rng_
+                )  # well cars run 53 ft intermodal boxes
+                out.append(
+                    {
+                        "track_id": tid,
+                        "idx": k,
+                        "owner": owner,
+                        "color": color,
+                        "geometry": LineString(
+                            [(a[0] + sx, a[1] + sy), (b[0] + sx, b[1] + sy)]
+                        ),
+                    }
+                )
+            k += 1
+    return out
+
+
+_wells = build_well_cars(
+    _tracks,
+    _locos,
+    [(g.x, g.y) for g in _cx.geometry if g is not None and not g.is_empty],
+    crng,  # reuse the same owner/color rng as the parked containers
+)
+(
+    gpd.GeoDataFrame(_wells, geometry="geometry", crs=UTM)
+    if _wells
+    else gpd.GeoDataFrame({"track_id": [], "idx": []}, geometry=[], crs=UTM)
+).to_file(GPKG, layer="well_cars", driver="GPKG")
+print(
+    f"Well cars: {len(_wells)} blocks ({len(_wells) * 3} well cars) on {len(set(w['track_id'] for w in _wells))} tracks."
+)
+
 rows["end_spot"] = (
     rows.start_spot.fillna(0) + rows.stall_count.fillna(0).astype(int) - 1
 )

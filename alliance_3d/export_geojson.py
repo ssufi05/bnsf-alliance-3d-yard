@@ -146,13 +146,16 @@ def _s(v):
 
 CAB_BEARING = {"north": 0, "east": 90, "south": 180, "west": 270}
 TROLLEY_MAX = 2.2  # m each way: 40 ft spreader inside the 55 ft clear width
+
 crane_rows = []
 for fid, c in read("gantry_cranes").iterrows():
     if c.geometry is None or c.geometry.is_empty:
         continue
+
     pt = c.geometry.centroid
     cid = c.get("crane_id") if _s(c.get("crane_id")) else f"RTG-{len(crane_rows) + 1}"
     track, side, bearing = None, None, 0.0
+
     if paths_ok:
         k = paths.distance(pt).idxmin()
         p = paths.geometry[k]
@@ -160,16 +163,23 @@ for fid, c in read("gantry_cranes").iterrows():
         d = p.project(pt)
         a, b = p.interpolate(max(d - 1, 0)), p.interpolate(d + 1)
         bearing = math.degrees(math.atan2(b.x - a.x, b.y - a.y)) % 360
-    bearing %= 180  # crane is symmetrical along its travel axis; 0-180 so it never depends on how the line was drawn
+
+    bearing %= 180  # crane is symmetrical along its travel axis
+
     manual = _n(c.get("heading_deg"))
     if manual is not None:
         heading = manual % 360
     else:
         heading = bearing
         want = CAB_BEARING.get(_s(c.get("cab_end")))
-        if want is not None:  # the cab sits on the model's +Z end = heading + 180
+        if want is not None:
             diff = lambda h: abs((h + 180 - want + 180) % 360 - 180)
             heading = min((bearing, bearing + 180), key=diff)
+
+    # Crane shop orientation correction: RTG-15 through RTG-21
+    if cid in {f"RTG-{i}" for i in range(15, 22)}:
+        heading = (heading + 90) % 360
+
     crane_rows.append(
         {
             "crane_id": cid,
@@ -183,6 +193,8 @@ for fid, c in read("gantry_cranes").iterrows():
             "geometry": pt,
         }
     )
+
+
 cr = (
     gpd.GeoDataFrame(crane_rows, geometry="geometry", crs=UTM)
     if crane_rows
@@ -220,6 +232,41 @@ save(
         for c in ["track_id", "unit", "train_end", "heading_deg", "model"]
         if c in loco.columns
     ],
+)
+
+# ---- well cars: READ from the GeoPackage (written by regen_spots.py) ----
+# regen_spots.py stores one LINE per 3-car block; here it becomes a point + compass bearing in lon/lat,
+# using the same meters-per-degree math as index.html so the blocks line up with the tracks on screen.
+wc = read("well_cars")
+wc_rows = []
+for tid, idx, owner, color, g in (
+    zip(
+        wc.to_crs(4326).track_id,
+        wc.to_crs(4326).idx,
+        wc.to_crs(4326).owner,
+        wc.to_crs(4326).color,
+        wc.to_crs(4326).geometry,
+    )
+    if len(wc)
+    else []
+):
+    (x0, y0), (x1, y1) = g.coords[0][:2], g.coords[-1][:2]
+    mlng = 111320.0 * math.cos(math.radians((y0 + y1) / 2))
+    brg = math.degrees(math.atan2((x1 - x0) * mlng, (y1 - y0) * 111320.0)) % 360
+    wc_rows.append(
+        {
+            "track_id": tid,
+            "idx": int(idx),
+            "bearing_deg": round(brg, 2),
+            "owner": owner,
+            "color": color,
+            "geometry": Point((x0 + x1) / 2, (y0 + y1) / 2),
+        }
+    )
+save(
+    gpd.GeoDataFrame(wc_rows, geometry="geometry", crs=4326) if wc_rows else wc,
+    "well_cars",
+    ["track_id", "idx", "bearing_deg", "owner", "color"],
 )
 
 # ---- buildings: yours + OSM context (assumed heights) -----------------------

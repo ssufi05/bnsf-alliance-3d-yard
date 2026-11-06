@@ -9,7 +9,10 @@
     />
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <script src="https://unpkg.com/three@0.147.0/build/three.min.js"></script>
+
     <script src="https://unpkg.com/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://unpkg.com/three@0.147.0/examples/js/loaders/DRACOLoader.js"></script>
+    <script src="https://unpkg.com/three@0.147.0/examples/js/utils/BufferGeometryUtils.js"></script>
     <link
       href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css"
       rel="stylesheet"
@@ -291,6 +294,78 @@
         transition: transform 0.1s linear;
       }
 
+      /* Street View Locomotive Drag Button */
+      #loco-street-btn {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+      }
+      #loco-street-btn:active {
+        cursor: grabbing;
+      }
+      #loco-street-btn img {
+        padding-top: 5px;
+        width: 2.5rem;
+        height: 2.5rem;
+        object-fit: contain;
+        pointer-events: none;
+        transition: transform 0.15s ease;
+      }
+      #loco-street-btn:hover img {
+        transform: scale(1.15);
+      }
+
+      /* Dragging Avatar floating under cursor */
+      #loco-drag-avatar {
+        position: fixed;
+        width: 56px;
+        height: 56px;
+        pointer-events: none;
+        z-index: 9999;
+        display: none;
+        transform: translate(-50%, -50%);
+        filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
+      }
+      #loco-drag-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      /* Street View Exit Floating Banner */
+      #street-view-bar {
+        position: absolute;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%) translateY(100px);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        border-radius: 30px;
+        opacity: 0;
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+        z-index: 1000;
+      }
+      #street-view-bar.active {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+        pointer-events: auto;
+      }
+      #street-view-bar button {
+        background: #ff3b30;
+        color: #fff;
+        padding: 6px 14px;
+        border-radius: 16px;
+        font-weight: 600;
+        font-size: 13px;
+      }
+
       .maplibregl-popup-content {
         padding: 12px 14px;
         border-radius: 14px;
@@ -379,6 +454,11 @@
         <button id="tilt" aria-label="Toggle 3D">3D</button>
       </div>
       <div class="grp glass">
+        <div id="loco-street-btn" title="Drag onto map for Ground Street View">
+          <img src="data/icons/loco_front.svg" alt="BNSF Street View" />
+        </div>
+      </div>
+      <div class="grp glass">
         <button id="zin" aria-label="Zoom in">
           <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
         </button>
@@ -395,6 +475,17 @@
       </div>
     </div>
 
+    <!-- Dragging Overlay Avatar -->
+    <div id="loco-drag-avatar">
+      <img src="data/icons/loco_front.svg" alt="" />
+    </div>
+
+    <!-- Ground View Status Pill -->
+    <div id="street-view-bar" class="glass">
+      <span>Ground Level View</span>
+      <button id="exit-street-btn">Exit View</button>
+    </div>
+
     <script>
       // Camera: Google/Apple style. Opens at a 45 deg tilt, rotated -20 deg (north points up-right), and the 3D button toggles flat <-> tilted.
       const TILT = 45,
@@ -407,7 +498,7 @@
         minPitch: 0,
         maxPitch: 70,
         center: [-97.348, 33.004],
-        zoom: 14,
+        zoom: 16,
         dragRotate: true,
         touchPitch: true,
         antialias: true,
@@ -546,7 +637,10 @@
             id: "tracks-bed",
             type: "line",
             source: "tracks",
-            paint: { "line-color": "#8e8c88", "line-width": zw(1.5, 5) },
+            paint: {
+              "line-color": "#5a5855",
+              "line-width": zw(3.5, 8),
+            },
           },
         ],
         [
@@ -556,9 +650,35 @@
             type: "line",
             source: "tracks",
             paint: {
-              "line-color": "#f5f4f1",
-              "line-width": zw(0.6, 2),
-              "line-dasharray": [1.5, 1.5],
+              "line-color": "#dcd6cb",
+              "line-width": zw(2.5, 6),
+              "line-dasharray": [0.8, 1.2],
+            },
+          },
+        ],
+        [
+          "Tracks",
+          {
+            id: "tracks-left-rail",
+            type: "line",
+            source: "tracks",
+            paint: {
+              "line-color": "#1c1c1e",
+              "line-width": zw(1, 2.2),
+              "line-offset": -1.4,
+            },
+          },
+        ],
+        [
+          "Tracks",
+          {
+            id: "tracks-right-rail",
+            type: "line",
+            source: "tracks",
+            paint: {
+              "line-color": "#1c1c1e",
+              "line-width": zw(1, 2.2),
+              "line-offset": 1.4,
             },
           },
         ],
@@ -785,16 +905,65 @@
         (e) => e.key === "Escape" && setSheet(false),
       );
 
+      // Camera state management & Street View implementation
+      let isStreetView = false;
+      let lastOverviewState = {
+        pitch: TILT,
+        zoom: 14,
+        center: [-97.348, 33.004],
+      };
+
+      const exitStreetView = () => {
+        if (!isStreetView) return;
+        isStreetView = false;
+        $("street-view-bar").classList.remove("active");
+        map.flyTo({
+          center: map.getCenter(),
+          zoom: 16,
+          pitch: TILT,
+          duration: 1000,
+        });
+      };
+
+      const enterStreetView = (lngLat) => {
+        lastOverviewState = {
+          pitch: map.getPitch(),
+          zoom: map.getZoom(),
+          center: map.getCenter(),
+        };
+        isStreetView = true;
+        $("street-view-bar").classList.add("active");
+
+        // Ground-level camera pitch (82 deg gives ground person view looking up at cranes and towers)
+        map.flyTo({
+          center: lngLat,
+          zoom: 18.8,
+          pitch: 82,
+          bearing: map.getBearing(),
+          duration: 1200,
+        });
+      };
+
       // camera controls
       $("zin").onclick = () => map.zoomIn({ duration: 300 });
       $("zout").onclick = () => map.zoomOut({ duration: 300 });
       $("compass").onclick = () => map.easeTo({ bearing: 0, duration: 500 });
-      $("tilt").onclick = () =>
-        map.easeTo({
-          pitch:
-            map.getPitch() > 5 ? 0 : map.getZoom() > 16 ? TILT_CLOSE : TILT,
-          duration: 600,
-        });
+
+      // Pressing 2D/3D exits street view and resets tilt
+      $("tilt").onclick = () => {
+        if (isStreetView) {
+          exitStreetView();
+        } else {
+          map.easeTo({
+            pitch:
+              map.getPitch() > 5 ? 0 : map.getZoom() > 16 ? TILT_CLOSE : TILT,
+            duration: 600,
+          });
+        }
+      };
+
+      $("exit-street-btn").onclick = exitStreetView;
+
       const sync = () => {
         $("needle").style.transform = `rotate(${-map.getBearing()}deg)`;
         $("needle").style.transformOrigin = "12px 12px";
@@ -805,6 +974,47 @@
       map.on("rotate", sync);
       map.on("pitch", sync);
       sync();
+
+      // Drag and Drop Locomotive Pegman Logic
+      const streetBtn = $("loco-street-btn");
+      const dragAvatar = $("loco-drag-avatar");
+      let isDraggingLoco = false;
+
+      const onPointerMove = (e) => {
+        if (!isDraggingLoco) return;
+        dragAvatar.style.left = e.clientX + "px";
+        dragAvatar.style.top = e.clientY + "px";
+      };
+
+      const onPointerUp = (e) => {
+        if (!isDraggingLoco) return;
+        isDraggingLoco = false;
+        dragAvatar.style.display = "none";
+        document.removeEventListener("pointermove", onPointerMove);
+        document.removeEventListener("pointerup", onPointerUp);
+
+        // Calculate map coordinates at drop site
+        const rect = map.getCanvas().getBoundingClientRect();
+        if (
+          e.clientX >= rect.left &&
+          e.clientX <= rect.right &&
+          e.clientY >= rect.top &&
+          e.clientY <= rect.bottom
+        ) {
+          const point = [e.clientX - rect.left, e.clientY - rect.top];
+          const lngLat = map.unproject(point);
+          enterStreetView(lngLat);
+        }
+      };
+
+      streetBtn.addEventListener("pointerdown", (e) => {
+        isDraggingLoco = true;
+        dragAvatar.style.left = e.clientX + "px";
+        dragAvatar.style.top = e.clientY + "px";
+        dragAvatar.style.display = "block";
+        document.addEventListener("pointermove", onPointerMove);
+        document.addEventListener("pointerup", onPointerUp);
+      });
 
       // Locomotives: SD60M model by OUTPISTON (CC BY-NC-SA 4.0), drawn with three.js
       // ---- 3D models (locomotives, cranes) drawn with three.js: one .glb cloned at every point of a geojson ----
@@ -896,6 +1106,293 @@
         return layer;
       }
 
+      // One .glb drawn at many points, fast: merges the model's meshes by material, then draws every copy as an instance
+      async function addInstancedLayer({ id, glb, data, toggle, pose }) {
+        let fc;
+        try {
+          fc = await (await fetch(data + "?v=" + Date.now())).json();
+        } catch (e) {
+          console.warn(data + " not loaded", e);
+          return;
+        }
+        if (!fc.features.length) return;
+        const origin = fc.features[0].geometry.coordinates;
+        const mc = maplibregl.MercatorCoordinate.fromLngLat(origin, 0);
+        const sc = mc.meterInMercatorCoordinateUnits();
+        const mLat = 111320,
+          mLng = 111320 * Math.cos((origin[1] * Math.PI) / 180);
+        let rebuildVisibleInstances = null;
+        const layer = {
+          id,
+          type: "custom",
+          renderingMode: "3d",
+          visible: true,
+          onAdd(m, gl) {
+            this.camera = new THREE.Camera();
+            this.scene = new THREE.Scene();
+            this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.0));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+            sun.position.set(-40, 100, 60);
+            this.scene.add(sun);
+            this.renderer = new THREE.WebGLRenderer({
+              canvas: m.getCanvas(),
+              context: gl,
+              antialias: true,
+            });
+            this.renderer.autoClear = false;
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            const dracoLoader = new THREE.DRACOLoader();
+
+            dracoLoader.setDecoderPath(
+              "https://www.gstatic.com/draco/versioned/decoders/1.5.6/",
+            );
+
+            const loader = new THREE.GLTFLoader();
+            loader.setDRACOLoader(dracoLoader);
+
+            loader.load(glb, (gltf) => {
+              // 1. Merge the GLB geometry by material ONCE
+              gltf.scene.updateMatrixWorld(true);
+
+              // Find the midpoint along the well car's longitudinal X axis.
+              // This becomes the rotation pivot instead of the original GLB origin.
+              const modelBounds = new THREE.Box3().setFromObject(gltf.scene);
+
+              const pivotX = (modelBounds.min.x + modelBounds.max.x) / 2;
+
+              console.log("Well car rotation pivot X:", pivotX);
+
+              const CONTAINER_MATERIAL_NAMES = ["container_paint"];
+              const groups = new Map();
+
+              gltf.scene.traverse((n) => {
+                if (!n.isMesh) return;
+
+                const g = n.geometry.clone();
+
+                for (const k of Object.keys(g.attributes)) {
+                  if (
+                    k !== "position" &&
+                    k !== "uv" &&
+                    k !== "normal" &&
+                    k !== "color"
+                  ) {
+                    g.deleteAttribute(k);
+                  }
+                }
+
+                if (!g.attributes.normal) g.computeVertexNormals();
+
+                g.applyMatrix4(n.matrixWorld);
+
+                if (!groups.has(n.material)) groups.set(n.material, []);
+                groups.get(n.material).push(g);
+              });
+
+              // Keep reusable geometry/material templates
+              const templates = [];
+
+              groups.forEach((geoms, material) => {
+                const merged = THREE.BufferGeometryUtils.mergeBufferGeometries(
+                  geoms,
+                  false,
+                );
+
+                // Release temporary geometries after merging
+                geoms.forEach((g) => g.dispose());
+
+                if (!merged) {
+                  console.warn(id + ": could not merge " + material.name);
+                  return;
+                }
+
+                // Move geometry so the midpoint between the two ends
+                // becomes the rotation origin.
+                merged.translate(-pivotX, 0, 0);
+
+                const isContainer = CONTAINER_MATERIAL_NAMES.includes(
+                  material.name,
+                );
+
+                let mat = material;
+
+                if (isContainer) {
+                  mat = material.clone();
+                  mat.vertexColors = true;
+                }
+
+                templates.push({
+                  geometry: merged,
+                  material: mat,
+                  isContainer,
+                });
+              });
+
+              // 2. Create persistent InstancedMeshes with capacity for the entire yard
+              this.wellMeshes = [];
+
+              templates.forEach((t) => {
+                const im = new THREE.InstancedMesh(
+                  t.geometry,
+                  t.material,
+                  fc.features.length,
+                );
+
+                // Start with zero active instances
+                im.count = 0;
+                im.frustumCulled = false;
+                im.userData.isContainer = t.isContainer;
+
+                this.wellMeshes.push(im);
+                this.scene.add(im);
+              });
+
+              // Track which GeoJSON features have already been rendered
+              const renderedFeatures = new Map();
+              let activeCount = 0;
+
+              const dummy = new THREE.Object3D();
+              const col = new THREE.Color();
+
+              // Add newly visible features without removing existing ones
+              rebuildVisibleInstances = (removeOutside = false) => {
+                const canvas = m.getCanvas();
+                const width = canvas.clientWidth;
+                const height = canvas.clientHeight;
+                const margin = 160;
+
+                // When movement ends, reset and rebuild using only the current viewport
+                if (removeOutside) {
+                  renderedFeatures.clear();
+                  activeCount = 0;
+
+                  this.wellMeshes.forEach((im) => {
+                    im.count = 0;
+                  });
+                }
+
+                let added = 0;
+
+                fc.features.forEach((f, index) => {
+                  const [lng, lat] = f.geometry.coordinates;
+                  const point = map.project([lng, lat]);
+
+                  const isVisible =
+                    point.x >= -margin &&
+                    point.x <= width + margin &&
+                    point.y >= -margin &&
+                    point.y <= height + margin;
+
+                  // Ignore features outside the viewport
+                  if (!isVisible) return;
+
+                  // Never add the same well car twice
+                  if (renderedFeatures.has(index)) return;
+
+                  const slot = activeCount;
+
+                  dummy.position.set(
+                    (lng - origin[0]) * mLng,
+                    0,
+                    -(lat - origin[1]) * mLat,
+                  );
+
+                  dummy.rotation.set(0, 0, 0);
+                  pose(dummy, f.properties);
+                  dummy.updateMatrix();
+
+                  // Add this well car to every material batch
+                  this.wellMeshes.forEach((im) => {
+                    im.setMatrixAt(slot, dummy.matrix);
+
+                    if (im.userData.isContainer) {
+                      col.set(f.properties.color || "#bbbbbb");
+                      im.setColorAt(slot, col);
+                    }
+                  });
+
+                  renderedFeatures.set(index, slot);
+                  activeCount++;
+                  added++;
+                });
+
+                // Update active instance counts and GPU buffers
+                this.wellMeshes.forEach((im) => {
+                  im.count = activeCount;
+                  im.instanceMatrix.needsUpdate = true;
+
+                  if (im.instanceColor) {
+                    im.instanceColor.needsUpdate = true;
+                  }
+                });
+
+                if (added > 0 || removeOutside) {
+                  console.log(
+                    "Well cars rendered:",
+                    activeCount,
+                    "/",
+                    fc.features.length,
+                  );
+
+                  m.triggerRepaint();
+                }
+              };
+
+              // Initial viewport load
+              rebuildVisibleInstances(true);
+            });
+          },
+          render(gl, matrix) {
+            if (!this.visible) return;
+            const l = new THREE.Matrix4()
+              .makeTranslation(mc.x, mc.y, mc.z)
+              .scale(new THREE.Vector3(sc, -sc, sc))
+              .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+            this.camera.projectionMatrix = new THREE.Matrix4()
+              .fromArray(matrix)
+              .multiply(l);
+            this.renderer.resetState();
+            this.renderer.render(this.scene, this.camera);
+          },
+        };
+        map.addLayer(layer);
+        // Progressively add newly visible well cars while moving
+        let lastProgressiveBuild = 0;
+
+        map.on("move", () => {
+          if (!layer.visible || !rebuildVisibleInstances) return;
+
+          const now = performance.now();
+
+          // Limit viewport scans to approximately 10 per second
+          if (now - lastProgressiveBuild < 100) return;
+
+          lastProgressiveBuild = now;
+
+          // Add newly visible cars; keep all previously rendered cars
+          rebuildVisibleInstances(false);
+        });
+
+        // Once movement stops, remove everything outside the viewport
+        map.on("moveend", () => {
+          if (layer.visible && rebuildVisibleInstances) {
+            rebuildVisibleInstances(true);
+          }
+        });
+        sheet.addEventListener("change", (e) => {
+          if (e.target.id === toggle) {
+            layer.visible = e.target.checked;
+
+            if (layer.visible && rebuildVisibleInstances) {
+              rebuildVisibleInstances(true);
+            }
+
+            map.triggerRepaint();
+          }
+        });
+        return layer;
+      }
+
       function addModels() {
         addModelLayer({
           id: "locomotives",
@@ -912,6 +1409,16 @@
           data: "data/cranes.geojson",
           toggle: "crane-t",
           pose: poseCrane,
+        });
+        addInstancedLayer({
+          id: "well-cars",
+          glb: "data/models/well_cars.glb",
+          data: "data/well_cars.geojson",
+          toggle: "wells-t",
+          pose: (o, p) => {
+            // bearing_deg is the compass direction of the track; the model's long axis is X
+            o.rotation.y = THREE.MathUtils.degToRad(90 - p.bearing_deg);
+          },
         });
       }
 
@@ -951,6 +1458,7 @@
             .join("") +
           '<label class="row"><span>Locomotives</span><span class="sw-t"><input type="checkbox" id="loco-t" checked><i></i></span></label>' +
           '<label class="row"><span>Cranes</span><span class="sw-t"><input type="checkbox" id="crane-t" checked><i></i></span></label>' +
+          '<label class="row"><span>Well cars</span><span class="sw-t"><input type="checkbox" id="wells-t" checked><i></i></span></label>' +
           "<hr><div class='sec'><h4>Go to</h4></div>" +
           '<div class="chips"><button class="chip" data-v="yard">Whole yard</button><button class="chip" data-v="spots">Lot B</button><button class="chip" data-v="buildings">Buildings</button><button class="chip" data-v="water">Pond</button></div>' +
           "<hr><div class='sec'><h4>Legend</h4></div>" +
@@ -1029,7 +1537,6 @@
           }
         });
         $("home").onclick = go.yard;
-        go.yard();
 
         map.on("click", (e) => {
           const f = map.queryRenderedFeatures(e.point, {
