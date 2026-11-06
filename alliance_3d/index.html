@@ -856,15 +856,6 @@
           },
         ],
         [
-          "Barriers / fences",
-          {
-            id: "barriers",
-            type: "fill-extrusion",
-            source: "barriers",
-            paint: ex("#d6d6d2"),
-          },
-        ],
-        [
           "Buildings",
           {
             id: "buildings",
@@ -1289,8 +1280,6 @@
 
               const pivotX = (modelBounds.min.x + modelBounds.max.x) / 2;
 
-              console.log("Well car rotation pivot X:", pivotX);
-
               const CONTAINER_MATERIAL_NAMES = ["container_paint"];
               const groups = new Map();
 
@@ -1456,13 +1445,6 @@
                 });
 
                 if (added > 0 || removeOutside) {
-                  console.log(
-                    "Well cars rendered:",
-                    activeCount,
-                    "/",
-                    fc.features.length,
-                  );
-
                   m.triggerRepaint();
                 }
               };
@@ -1522,6 +1504,260 @@
         return layer;
       }
 
+      async function addBarrierModels() {
+        const data = "data/barriers.geojson";
+        const glb = "data/models/k_wall.glb";
+
+        // Dimensions in meters
+        const BARRIER_LENGTH = 3.6576; // 12 feet
+        const MIN_GAP = 0.3048; // 1 foot
+        const TARGET_HEIGHT = 0.81; // 81 cm
+
+        let fc;
+
+        try {
+          fc = await (await fetch(data + "?v=" + Date.now())).json();
+        } catch (e) {
+          console.warn("Barrier GeoJSON not loaded", e);
+          return;
+        }
+
+        const features = fc.features.filter(
+          (f) =>
+            f.geometry?.type === "LineString" &&
+            (f.properties.barrier_type === "jersey" ||
+              f.properties.barrier_type == null),
+        );
+
+        if (!features.length) {
+          console.warn("No Jersey barrier LineStrings found");
+          return;
+        }
+
+        const origin = features[0].geometry.coordinates[0];
+        const mc = maplibregl.MercatorCoordinate.fromLngLat(origin, 0);
+        const sc = mc.meterInMercatorCoordinateUnits();
+
+        const mLat = 111320;
+        const mLng = 111320 * Math.cos((origin[1] * Math.PI) / 180);
+
+        const layer = {
+          id: "barriers-3d",
+          type: "custom",
+          renderingMode: "3d",
+          visible: true,
+
+          onAdd(m, gl) {
+            this.camera = new THREE.Camera();
+            this.scene = new THREE.Scene();
+
+            this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1));
+
+            const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+            sun.position.set(-40, 100, 60);
+            this.scene.add(sun);
+
+            this.renderer = new THREE.WebGLRenderer({
+              canvas: m.getCanvas(),
+              context: gl,
+              antialias: true,
+            });
+
+            this.renderer.autoClear = false;
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+
+            new THREE.GLTFLoader().load(
+              glb,
+              (gltf) => {
+                const template = gltf.scene;
+
+                template.updateMatrixWorld(true);
+
+                const bounds = new THREE.Box3().setFromObject(template);
+                const size = new THREE.Vector3();
+                bounds.getSize(size);
+
+                // The model's long axis is local Z.
+                const modelLength = size.z;
+                const modelHeight = size.y;
+
+                if (!modelLength || !modelHeight) {
+                  console.warn("K-wall model has invalid dimensions");
+                  return;
+                }
+
+                // Scale the model to 12 feet long and 81 cm high.
+                const scaleZ = BARRIER_LENGTH / modelLength;
+                const scaleY = TARGET_HEIGHT / modelHeight;
+
+                // Center the model's original bounding box around its origin.
+                const centerX = (bounds.min.x + bounds.max.x) / 2;
+                const centerZ = (bounds.min.z + bounds.max.z) / 2;
+
+                // Convert a coordinate to the local Three.js yard coordinate system.
+                const toLocal = (coord) => ({
+                  x: (coord[0] - origin[0]) * mLng,
+                  z: -(coord[1] - origin[1]) * mLat,
+                });
+
+                // Place barriers along every segment of each LineString.
+                features.forEach((f) => {
+                  const coords = f.geometry.coordinates;
+
+                  if (coords.length < 2) return;
+
+                  // Build the complete line in local meter coordinates.
+                  const points = coords.map(toLocal);
+
+                  let totalLength = 0;
+
+                  const segments = [];
+
+                  for (let i = 0; i < points.length - 1; i++) {
+                    const a = points[i];
+                    const b = points[i + 1];
+
+                    const dx = b.x - a.x;
+                    const dz = b.z - a.z;
+                    const length = Math.hypot(dx, dz);
+
+                    if (length < 0.001) continue;
+
+                    segments.push({
+                      a,
+                      b,
+                      dx,
+                      dz,
+                      length,
+                      start: totalLength,
+                    });
+
+                    totalLength += length;
+                  }
+
+                  if (totalLength < BARRIER_LENGTH) {
+                    console.warn(
+                      "Barrier line is shorter than one 12-foot K-wall:",
+                      f.properties.id,
+                    );
+                    return;
+                  }
+
+                  // Fit the maximum number of 12-foot barriers while
+                  // maintaining at least a 1-foot gap.
+                  const count = Math.floor(
+                    (totalLength + MIN_GAP) / (BARRIER_LENGTH + MIN_GAP),
+                  );
+
+                  if (count < 1) return;
+
+                  // Distribute all remaining space evenly.
+                  // This also centers the group along the line.
+                  const gap =
+                    count > 1
+                      ? (totalLength - count * BARRIER_LENGTH) / (count - 1)
+                      : 0;
+
+                  // Do not allow the calculated gap to fall below 1 foot.
+                  if (count > 1 && gap < MIN_GAP - 0.001) {
+                    console.warn("Calculated K-wall gap is too small");
+                    return;
+                  }
+
+                  const getPointAtDistance = (distance) => {
+                    const d = Math.max(0, Math.min(distance, totalLength));
+
+                    const segment =
+                      segments.find(
+                        (s) => d >= s.start && d <= s.start + s.length,
+                      ) || segments[segments.length - 1];
+
+                    const t = Math.max(
+                      0,
+                      Math.min(1, (d - segment.start) / segment.length),
+                    );
+
+                    return {
+                      x: segment.a.x + segment.dx * t,
+                      z: segment.a.z + segment.dz * t,
+                      dx: segment.dx,
+                      dz: segment.dz,
+                    };
+                  };
+
+                  for (let i = 0; i < count; i++) {
+                    const centerDistance =
+                      BARRIER_LENGTH / 2 + i * (BARRIER_LENGTH + gap);
+
+                    const p = getPointAtDistance(centerDistance);
+
+                    const o = template.clone(true);
+
+                    // Rotate the model's local Z axis to follow the line.
+                    o.rotation.y = Math.atan2(p.dx, p.dz);
+
+                    o.scale.set(scaleZ, scaleY, scaleZ);
+
+                    // Correct for the GLB's off-center original geometry.
+                    const offset = new THREE.Vector3(
+                      -centerX,
+                      -bounds.min.y,
+                      -centerZ,
+                    );
+
+                    offset.multiply(o.scale);
+                    offset.applyAxisAngle(
+                      new THREE.Vector3(0, 1, 0),
+                      o.rotation.y,
+                    );
+
+                    o.position.set(p.x + offset.x, 0, p.z + offset.z);
+
+                    this.scene.add(o);
+                  }
+
+                  console.log(
+                    `K-wall line ${f.properties.id || "(no ID)"}: ` +
+                      `${count} barriers, ${(gap * 3.28084).toFixed(2)} ft gaps`,
+                  );
+                });
+
+                m.triggerRepaint();
+              },
+              undefined,
+              (error) => {
+                console.error("Failed to load K-wall model", error);
+              },
+            );
+          },
+
+          render(gl, matrix) {
+            if (!this.visible) return;
+
+            const l = new THREE.Matrix4()
+              .makeTranslation(mc.x, mc.y, mc.z)
+              .scale(new THREE.Vector3(sc, -sc, sc))
+              .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+
+            this.camera.projectionMatrix = new THREE.Matrix4()
+              .fromArray(matrix)
+              .multiply(l);
+
+            this.renderer.resetState();
+            this.renderer.render(this.scene, this.camera);
+          },
+        };
+
+        map.addLayer(layer);
+
+        sheet.addEventListener("change", (e) => {
+          if (e.target.id === "barriers-t") {
+            layer.visible = e.target.checked;
+            map.triggerRepaint();
+          }
+        });
+      }
+
       function addModels() {
         addModelLayer({
           id: "locomotives",
@@ -1549,6 +1785,8 @@
             o.rotation.y = THREE.MathUtils.degToRad(90 - p.bearing_deg);
           },
         });
+
+        addBarrierModels();
       }
 
       map.on("load", async () => {
@@ -1660,6 +1898,7 @@
           '<label class="row"><span>Locomotives</span><span class="sw-t"><input type="checkbox" id="loco-t" checked><i></i></span></label>' +
           '<label class="row"><span>Cranes</span><span class="sw-t"><input type="checkbox" id="crane-t" checked><i></i></span></label>' +
           '<label class="row"><span>Well cars</span><span class="sw-t"><input type="checkbox" id="wells-t" checked><i></i></span></label>' +
+          '<label class="row"><span>Jersey barriers</span><span class="sw-t"><input type="checkbox" id="barriers-t" checked><i></i></span></label>' +
           "<hr><div class='sec'><h4>Go to</h4></div>" +
           '<div class="chips"><button class="chip" data-v="yard">Whole yard</button><button class="chip" data-v="spots">Lot B</button><button class="chip" data-v="buildings">Buildings</button><button class="chip" data-v="water">Pond</button></div>' +
           "<hr><div class='sec'><h4>Legend</h4></div>" +

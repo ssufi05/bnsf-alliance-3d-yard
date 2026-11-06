@@ -442,11 +442,60 @@ road_outline = gpd.GeoDataFrame(
     {"kind": ["road"]}, geometry=[unary_union(rd.geometry)], crs=UTM
 )
 save(road_outline, "roads_outline", ["kind"])
-bar = rq[rq.barrier.notna()].copy()
-bar["height_m"] = bar.barrier.map({"fence": 2.4, "jersey_barrier": 0.8}).fillna(1.0)
-bar["geometry"] = bar.geometry.buffer(0.2, cap_style=2)
-bar["source"] = "osm"
-save(bar, "barriers", ["barrier", "height_m", "source"])
+# ---- barriers: read manually digitized barriers from GeoPackage ----
+bar = read("barriers").copy()
+
+if len(bar):
+    # Preserve existing barrier types
+    bar["barrier_type"] = bar["barrier_type"].astype("object")
+
+    # Assign IDs to features that do not have one
+    if "barrier_id" not in bar.columns:
+        bar["barrier_id"] = None
+
+    existing_ids = bar["barrier_id"].dropna().astype(str)
+
+    used_numbers = [
+        int(x.split("-")[1])
+        for x in existing_ids
+        if x.startswith("BR-") and x.split("-")[1].isdigit()
+    ]
+
+    next_id = max(used_numbers, default=0) + 1
+
+    # Sort by GeoPackage feature ID for consistent assignment
+    for idx in bar.index[bar["barrier_id"].isna()]:
+        while f"BR-{next_id:03d}" in existing_ids.values:
+            next_id += 1
+
+        bar.at[idx, "barrier_id"] = f"BR-{next_id:03d}"
+        next_id += 1
+
+    # Standard Jersey barrier dimensions for jersey and NULL types
+    mask = bar["barrier_type"].isna() | (bar["barrier_type"] == "jersey")
+    bar.loc[mask, "height_m"] = 0.81
+    bar.loc[mask, "width_m"] = 3.6576
+
+    # Export without changing the original geometry
+    save(
+        bar,
+        "barriers",
+        [
+            "barrier_id",
+            "barrier_type",
+            "height_m",
+            "width_m",
+            "source",
+        ],
+    )
+else:
+    save(
+        bar, "barriers", ["barrier_id", "barrier_type", "height_m", "width_m", "source"]
+    )
+
+print("Barrier types:")
+print(bar["barrier_type"].value_counts(dropna=False))
+print("Generated barrier IDs:", len(bar) - len(existing_ids) if len(bar) else 0)
 save(read("yard_surface"), "yard_surface", ["name", "surface_type"])
 
 # ---- rail points and props (gates, wells, towers, masts): READ from the v2 GeoPackage ----------
