@@ -1,3 +1,5 @@
+import { SOURCES, CLICKABLE, LEGEND } from "./config.js";
+
 // Camera: Google/Apple style. Opens at a 45 deg tilt, rotated -20 deg (north points up-right), and the 3D button toggles flat <-> tilted.
 const TILT = 45,
   TILT_CLOSE = 58;
@@ -29,32 +31,6 @@ const map = new maplibregl.Map({
 // right-drag / ctrl-drag rotates + tilts (like Google Maps); two-finger twist & drag on touch
 map.touchZoomRotate.enableRotation();
 
-const SOURCES = [
-  "yard_surface",
-  "grass",
-  "water",
-  "lots",
-  "lot_labels",
-  "roads",
-  "roads_outline",
-  "oil_stain",
-  "tracks",
-  "rail_points",
-  "gantry_paths",
-  "crossings",
-  "crossing_marks",
-  "stop_text",
-  "barriers",
-  "buildings",
-  "props",
-  "trees",
-  "spots",
-  "chassis",
-  "containers",
-  "light_poles",
-  "power_line",
-  "cranes",
-];
 const ex = (c, o) => ({
   "fill-extrusion-color": c,
   "fill-extrusion-height": ["get", "height_m"],
@@ -420,36 +396,6 @@ const LAYERS = [
 LAYERS.find((l) => l[1].id === "trunks")[1].paint["fill-extrusion-height"] = [
   "get",
   "height_m",
-];
-const CLICKABLE = [
-  "containers",
-  "chassis",
-  "buildings",
-  "props",
-  "crossings",
-  "rail-pts",
-  "lots-fill",
-  "roads",
-  "crane-pts",
-];
-
-const LEGEND = [
-  ["#F2F0EA", "J.B. Hunt 53 ft (sim)"],
-  ["#232F3E", "Amazon 53 ft (sim)"],
-  ["#F36F21", "Schneider 53 ft (sim)"],
-  ["#0072CE", "Hub Group 53 ft (sim)"],
-  ["#006B45", "EMP 53 ft (sim)"],
-  ["#00529B", "UMAX 53 ft (sim)"],
-  ["#003DA5", "Swift 53 ft (sim)"],
-  ["#8A8F98", "Other domestic / ocean (sim)"],
-  ["#FFCC00", "MSC (sim)"],
-  ["#42B0D5", "Maersk (sim)"],
-  ["#005BAC", "COSCO (sim)"],
-  ["#003A70", "CMA CGM (sim)"],
-  ["#FF7900", "Hapag-Lloyd (sim)"],
-  ["#E5007D", "ONE (sim)"],
-  ["#00843D", "Evergreen (sim)"],
-  ["#F6442A", "J.B. Hunt chassis"],
 ];
 
 const $ = (id) => document.getElementById(id);
