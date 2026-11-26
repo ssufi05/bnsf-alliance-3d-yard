@@ -469,17 +469,153 @@ $("tilt").onclick = () => {
 
 $("exit-street-btn").onclick = exitStreetView;
 
-// ---- Drone flight: a scripted camera path played frame by frame ----
-const DRONE_PATH = [
-  // seconds, lng, lat, zoom, pitch, bearing
-  [0, -97.348, 33.004, 13.6, 10, -20],
-  [6, -97.348, 33.004, 15.0, 45, -20],
-  [12, -97.347, 33.0045, 16.2, 58, 15],
-  [18, -97.346, 33.005, 16.9, 64, 60],
-  [24, -97.349, 33.004, 18.2, 78, 110],
-  [30, -97.348, 33.004, 15.2, 55, 170],
-];
-const DRONE_END = DRONE_PATH[DRONE_PATH.length - 1][0];
+// ---- Drone flight: a path built from real yard data, played frame by frame ----
+const DRONE_SPEED = 3; // 1 = original pace, 2 = twice as fast, 0.5 = half speed
+
+let DRONE_PATH = null;
+let DRONE_END = 0;
+
+const toRad = (d) => (d * Math.PI) / 180;
+const toDeg = (r) => (r * 180) / Math.PI;
+
+// Good-enough centroid: average every point of the outer ring.
+const polygonCentroid = (geometry) => {
+  const ring = geometry.coordinates[0];
+  let lng = 0,
+    lat = 0;
+  for (const [x, y] of ring) {
+    lng += x;
+    lat += y;
+  }
+  return [lng / ring.length, lat / ring.length];
+};
+
+const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+// Compass bearing (degrees) from point a to point b, for pointing the
+// camera at wherever the drone is headed next.
+const bearingBetween = (a, b) => {
+  const lat1 = toRad(a[1]),
+    lat2 = toRad(b[1]);
+  const dLng = toRad(b[0] - a[0]);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+};
+
+// Greedy nearest-neighbor tour: always hop to whichever unvisited stop is
+// closest, so the flight sweeps naturally across the yard.
+const nearestNeighborTour = (stops) => {
+  const remaining = stops.slice();
+  const tour = [remaining.shift()];
+  while (remaining.length) {
+    const last = tour[tour.length - 1];
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    remaining.forEach((stop, i) => {
+      const d = distance(last.lnglat, stop.lnglat);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    });
+    tour.push(remaining.splice(bestIdx, 1)[0]);
+  }
+  return tour;
+};
+
+const buildDronePath = async () => {
+  const [lots, tracks] = await Promise.all([
+    fetch("data/lots.geojson").then((r) => r.json()),
+    fetch("data/tracks.geojson").then((r) => r.json()),
+  ]);
+
+  // One stop per lot_id — some lots (A, G, J) are split into several
+  // polygons, so average those centroids into a single stop per lot.
+  const lotCentroids = {};
+  lots.features.forEach((f) => {
+    const id = f.properties.lot_id;
+    const c = polygonCentroid(f.geometry);
+    if (!lotCentroids[id]) {
+      lotCentroids[id] = {
+        sum: [0, 0],
+        n: 0,
+        name: f.properties.lot_name || id,
+      };
+    }
+    lotCentroids[id].sum[0] += c[0];
+    lotCentroids[id].sum[1] += c[1];
+    lotCentroids[id].n++;
+  });
+  const lotStops = Object.values(lotCentroids).map((entry) => ({
+    lnglat: [entry.sum[0] / entry.n, entry.sum[1] / entry.n],
+    zoom: 15.6,
+    pitch: 52, // wide, establishing-shot angle — catches nearby locomotives/cranes too
+  }));
+
+  const lotTour = nearestNeighborTour(lotStops);
+
+  // ---- Tracks sweep: one pass along the whole corridor, not stop-by-stop ----
+  // Only the named mainline tracks (7201-7209); the many unnamed short
+  // connector segments aren't worth individually targeting.
+  const namedTrackCoords = tracks.features
+    .filter((f) => f.properties.track_id)
+    .flatMap((f) => f.geometry.coordinates);
+
+  const lats = namedTrackCoords.map((c) => c[1]);
+  const lngs = namedTrackCoords.map((c) => c[0]);
+  const bounds = {
+    minLat: Math.min(...lats),
+    maxLat: Math.max(...lats),
+    centerLng: (Math.min(...lngs) + Math.max(...lngs)) / 2,
+  };
+
+  // Tracks run roughly north-south here, so sweep along latitude at a
+  // zoom wide enough to keep the whole bundle of tracks in frame.
+  const TRACK_SWEEP_ZOOM = 15.2;
+  const TRACK_SWEEP_PITCH = 58;
+  const trackSweepStops = [
+    {
+      lnglat: [bounds.centerLng, bounds.maxLat],
+      zoom: TRACK_SWEEP_ZOOM,
+      pitch: TRACK_SWEEP_PITCH,
+    },
+    {
+      lnglat: [bounds.centerLng, (bounds.maxLat + bounds.minLat) / 2],
+      zoom: TRACK_SWEEP_ZOOM,
+      pitch: TRACK_SWEEP_PITCH,
+    },
+    {
+      lnglat: [bounds.centerLng, bounds.minLat],
+      zoom: TRACK_SWEEP_ZOOM,
+      pitch: TRACK_SWEEP_PITCH,
+    },
+  ];
+
+  const tour = [...lotTour, ...trackSweepStops];
+
+  // Turn the ordered tour into timestamped waypoints, with each camera
+  // bearing pointed toward the next stop.
+  const SECONDS_PER_STOP = 4.5;
+  const path = tour.map((stop, i) => {
+    const next = tour[i + 1] || stop;
+    return [
+      i * SECONDS_PER_STOP,
+      stop.lnglat[0],
+      stop.lnglat[1],
+      stop.zoom,
+      stop.pitch,
+      bearingBetween(stop.lnglat, next.lnglat),
+    ];
+  });
+
+  DRONE_PATH = path;
+  DRONE_END = path[path.length - 1][0];
+};
+
+buildDronePath();
 
 // smooth curve through the waypoints
 const droneCam = (t) => {
@@ -534,12 +670,14 @@ const stopDrone = () => {
   map.setMaxPitch(NORMAL_MAX_PITCH);
 
   droneButton.classList.remove("on");
-
-  console.log("Drone flight stopped");
 };
 
 const startDrone = () => {
   if (droneOn) return;
+
+  if (!DRONE_PATH) {
+    return;
+  }
 
   // Exit ground-level view first.
   if (isStreetView) {
@@ -557,8 +695,6 @@ const startDrone = () => {
 
   map.setMaxPitch(DRONE_MAX_PITCH);
 
-  console.log("Drone flight starting");
-
   // Start the cinematic flight at its first waypoint.
   const beginFlight = () => {
     if (!droneOn || currentRun !== droneRunId) return;
@@ -568,7 +704,7 @@ const startDrone = () => {
     const tick = (now) => {
       if (!droneOn || currentRun !== droneRunId) return;
 
-      const elapsed = (now - startTime) / 1000;
+      const elapsed = ((now - startTime) / 1000) * DRONE_SPEED;
 
       if (elapsed >= DRONE_END) {
         stopDrone();
@@ -609,26 +745,6 @@ const startDrone = () => {
     essential: true,
   });
 };
-
-// Drone button click.
-droneButton.addEventListener("click", () => {
-  console.log("Drone button clicked");
-
-  if (droneOn) {
-    stopDrone();
-  } else {
-    startDrone();
-  }
-});
-
-// Manual map interaction interrupts the cinematic flight.
-["mousedown", "wheel", "touchstart"].forEach((eventName) => {
-  map.on(eventName, () => {
-    if (droneOn) {
-      stopDrone();
-    }
-  });
-});
 
 // Manual map interaction interrupts the cinematic flight.
 ["mousedown", "wheel", "touchstart"].forEach((eventName) => {
