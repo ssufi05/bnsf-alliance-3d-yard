@@ -6,3 +6,7 @@
 *.gpkg
 *.gpkg-wal
 *.gpkg-shm
+
+capture_yard.py
+yard-flythorugh.mp4
+still.jpg

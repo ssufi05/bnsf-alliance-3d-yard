@@ -267,9 +267,11 @@ hr {
   font-weight: 700;
   font-size: 15px;
 }
-#tilt.on {
+#tilt.on,
+#drone.on {
   color: var(--accent);
 }
+
 #compass svg {
   transition: transform 0.1s linear;
 }

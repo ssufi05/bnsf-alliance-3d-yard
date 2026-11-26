@@ -469,6 +469,176 @@ $("tilt").onclick = () => {
 
 $("exit-street-btn").onclick = exitStreetView;
 
+// ---- Drone flight: a scripted camera path played frame by frame ----
+const DRONE_PATH = [
+  // seconds, lng, lat, zoom, pitch, bearing
+  [0, -97.348, 33.004, 13.6, 10, -20],
+  [6, -97.348, 33.004, 15.0, 45, -20],
+  [12, -97.347, 33.0045, 16.2, 58, 15],
+  [18, -97.346, 33.005, 16.9, 64, 60],
+  [24, -97.349, 33.004, 18.2, 78, 110],
+  [30, -97.348, 33.004, 15.2, 55, 170],
+];
+const DRONE_END = DRONE_PATH[DRONE_PATH.length - 1][0];
+
+// smooth curve through the waypoints
+const droneCam = (t) => {
+  const P = DRONE_PATH,
+    n = P.length;
+  t = Math.max(P[0][0], Math.min(DRONE_END, t));
+  let i = 0;
+  while (i < n - 2 && t > P[i + 1][0]) i++;
+  const p1 = P[i],
+    p2 = P[i + 1];
+  const p0 = P[i - 1] || p1,
+    p3 = P[i + 2] || p2;
+  const u = (t - p1[0]) / (p2[0] - p1[0]);
+  const cr = (a, b, c, d) =>
+    0.5 *
+    (2 * b +
+      (-a + c) * u +
+      (2 * a - 5 * b + 4 * c - d) * u * u +
+      (-a + 3 * b - 3 * c + d) * u * u * u);
+  const v = [1, 2, 3, 4, 5].map((k) => cr(p0[k], p1[k], p2[k], p3[k]));
+  return {
+    center: [v[0], v[1]],
+    zoom: v[2],
+    pitch: Math.min(85, Math.max(0, v[3])),
+    bearing: v[4],
+  };
+};
+
+// ---- Cinematic drone camera controller ----
+
+let droneOn = false;
+let droneRaf = 0;
+let droneRunId = 0;
+
+const droneButton = $("drone");
+const NORMAL_MAX_PITCH = 70;
+const DRONE_MAX_PITCH = 85;
+
+const stopDrone = () => {
+  if (!droneOn) return;
+
+  droneOn = false;
+  droneRunId++;
+
+  cancelAnimationFrame(droneRaf);
+  droneRaf = 0;
+
+  // Stop any currently running camera transition.
+  map.stop();
+
+  // Restore the normal camera limits.
+  map.setMaxPitch(NORMAL_MAX_PITCH);
+
+  droneButton.classList.remove("on");
+
+  console.log("Drone flight stopped");
+};
+
+const startDrone = () => {
+  if (droneOn) return;
+
+  // Exit ground-level view first.
+  if (isStreetView) {
+    isStreetView = false;
+    $("street-view-bar").classList.remove("active");
+  }
+
+  // Cancel any previous camera movement.
+  map.stop();
+
+  droneOn = true;
+  const currentRun = ++droneRunId;
+
+  droneButton.classList.add("on");
+
+  map.setMaxPitch(DRONE_MAX_PITCH);
+
+  console.log("Drone flight starting");
+
+  // Start the cinematic flight at its first waypoint.
+  const beginFlight = () => {
+    if (!droneOn || currentRun !== droneRunId) return;
+
+    const startTime = performance.now();
+
+    const tick = (now) => {
+      if (!droneOn || currentRun !== droneRunId) return;
+
+      const elapsed = (now - startTime) / 1000;
+
+      if (elapsed >= DRONE_END) {
+        stopDrone();
+        return;
+      }
+
+      // Interpolate the camera position.
+      const camera = droneCam(elapsed);
+
+      map.jumpTo(camera);
+
+      droneRaf = requestAnimationFrame(tick);
+    };
+
+    droneRaf = requestAnimationFrame(tick);
+  };
+
+  // Register the listener BEFORE starting the transition.
+  // This prevents missing the moveend event.
+  let flightStarted = false;
+  const tryBeginFlight = () => {
+    if (flightStarted) return;
+    flightStarted = true;
+    beginFlight();
+  };
+
+  map.once("moveend", tryBeginFlight);
+
+  // Fallback: moveend never fires if the camera is already at the
+  // starting waypoint (no movement occurs), so force the flight to
+  // begin once the easeTo duration has elapsed regardless.
+  setTimeout(tryBeginFlight, 1600);
+
+  // Glide to the starting camera position.
+  map.easeTo({
+    ...droneCam(0),
+    duration: 1500,
+    essential: true,
+  });
+};
+
+// Drone button click.
+droneButton.addEventListener("click", () => {
+  console.log("Drone button clicked");
+
+  if (droneOn) {
+    stopDrone();
+  } else {
+    startDrone();
+  }
+});
+
+// Manual map interaction interrupts the cinematic flight.
+["mousedown", "wheel", "touchstart"].forEach((eventName) => {
+  map.on(eventName, () => {
+    if (droneOn) {
+      stopDrone();
+    }
+  });
+});
+
+// Manual map interaction interrupts the cinematic flight.
+["mousedown", "wheel", "touchstart"].forEach((eventName) => {
+  map.on(eventName, () => {
+    if (droneOn) {
+      stopDrone();
+    }
+  });
+});
+
 const sync = () => {
   $("needle").style.transform = `rotate(${-map.getBearing()}deg)`;
   $("needle").style.transformOrigin = "12px 12px";
@@ -1094,11 +1264,6 @@ async function addBarrierModels() {
 
               this.scene.add(o);
             }
-
-            console.log(
-              `K-wall line ${f.properties.id || "(no ID)"}: ` +
-                `${count} barriers, ${(gap * 3.28084).toFixed(2)} ft gaps`,
-            );
           });
 
           m.triggerRepaint();
