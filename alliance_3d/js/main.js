@@ -1418,6 +1418,177 @@ async function addBarrierModels() {
   });
 }
 
+// ---- Spot number labels: black square + bold yellow number, placed 0.5m
+// past the stall's road-facing short edge, rotated to match the stall's
+// orientation, and painted underneath the containers layer so a parked
+// container correctly occludes its own label. ----
+async function addSpotLabels() {
+  const [spots, roads] = await Promise.all([
+    fetch("data/spots.geojson").then((r) => r.json()),
+    fetch("data/roads.geojson").then((r) => r.json()),
+  ]);
+
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+  // Flatten road polygon rings into a point list for nearest-point checks.
+  // Downsampled (every 3rd vertex) since roads are digitized densely and we
+  // only need "which side is closer," not an exact distance.
+  const roadPoints = [];
+  roads.features.forEach((f) => {
+    const polys =
+      f.geometry.type === "MultiPolygon"
+        ? f.geometry.coordinates
+        : [f.geometry.coordinates];
+    polys.forEach((rings) =>
+      rings.forEach((ring) => {
+        for (let i = 0; i < ring.length; i += 3) roadPoints.push(ring[i]);
+      }),
+    );
+  });
+
+  const distSqToRoad = (pt) => {
+    let best = Infinity;
+    for (const rp of roadPoints) {
+      const dx = rp[0] - pt[0],
+        dy = rp[1] - pt[1];
+      const d = dx * dx + dy * dy;
+      if (d < best) best = d;
+    }
+    return best;
+  };
+
+  // Meters -> degrees, scaled for this latitude (same constants used
+  // elsewhere in this file for the three.js model placement).
+  const OFFSET_M = 1.5;
+  const mLat = 111320;
+  const latOffsetDeg = OFFSET_M / mLat;
+
+  const labelFeatures = spots.features.map((f) => {
+    const ring = f.geometry.coordinates[0]; // [p0, p1, p2, p3, p0]
+    const [p0, p1, p2] = ring;
+    const p3 = ring[3];
+
+    const mLng = mLat * Math.cos((p0[1] * Math.PI) / 180);
+    const lngOffsetDeg = OFFSET_M / mLng;
+
+    // Centroid for reference.
+    let clng = 0,
+      clat = 0;
+    const n = ring.length - 1;
+    for (let i = 0; i < n; i++) {
+      clng += ring[i][0];
+      clat += ring[i][1];
+    }
+    clng /= n;
+    clat /= n;
+
+    // Find the stall's short edge pair (the front/back ends) vs. the long
+    // pair (the sides running along the stall's length).
+    const edge01 = dist(p0, p1),
+      edge12 = dist(p1, p2);
+    const shortIsP0P1 = edge01 < edge12;
+
+    const shortMidA = shortIsP0P1 ? mid(p0, p1) : mid(p1, p2);
+    const shortMidB = shortIsP0P1 ? mid(p2, p3) : mid(p3, p0);
+
+    // Whichever short edge sits closer to a road is this stall's front —
+    // that's the side a number is actually seen from.
+    const frontMid =
+      distSqToRoad(shortMidA) <= distSqToRoad(shortMidB)
+        ? shortMidA
+        : shortMidB;
+
+    // Direction from centroid toward that edge's midpoint, normalized —
+    // then push the label 0.5m PAST the edge itself (not 0.5m from the
+    // centroid, which would barely move it since the centroid sits ~half
+    // the stall's length away from the edge already).
+    let dx = frontMid[0] - clng,
+      dy = frontMid[1] - clat;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+
+    const labelPoint = [
+      frontMid[0] + dx * lngOffsetDeg,
+      frontMid[1] + dy * latOffsetDeg,
+    ];
+
+    // Bearing of the stall's long axis, so the label rotates to match the
+    // container's orientation instead of always facing north.
+    const longAxisP1 = shortIsP0P1 ? p1 : p0;
+    const longAxisP2 = shortIsP0P1 ? p2 : p1;
+    const bearingDeg =
+      (Math.atan2(
+        longAxisP2[0] - longAxisP1[0],
+        longAxisP2[1] - longAxisP1[1],
+      ) *
+        180) /
+      Math.PI;
+
+    return {
+      type: "Feature",
+      properties: {
+        label: String(f.properties.spot_num),
+        bearing: bearingDeg,
+      },
+      geometry: { type: "Point", coordinates: labelPoint },
+    };
+  });
+
+  // Each distinct spot number gets its own baked icon (square + bold yellow
+  // digits drawn together in one bitmap), so the number can never scale
+  // independently of the square — they're literally the same image.
+  const SIZE = 64;
+  const uniqueLabels = [
+    ...new Set(labelFeatures.map((f) => f.properties.label)),
+  ];
+
+  uniqueLabels.forEach((label) => {
+    const name = `spot_square_${label}`;
+    if (map.hasImage(name)) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = SIZE;
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = "#000";
+    ctx.fillRect(2, 2, SIZE - 4, SIZE - 4);
+
+    ctx.fillStyle = "#f5d90a";
+    ctx.font = `bold ${Math.round(SIZE * 0.42)}px "Arial", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, SIZE / 2, SIZE / 2 + 1);
+
+    map.addImage(name, ctx.getImageData(0, 0, SIZE, SIZE));
+  });
+
+  map.addSource("spot_labels", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: labelFeatures },
+  });
+
+  map.addLayer(
+    {
+      id: "spot-label-bg",
+      type: "symbol",
+      source: "spot_labels",
+      minzoom: 17,
+      layout: {
+        "icon-image": ["concat", "spot_square_", ["get", "label"]],
+        "icon-size": groundSize(1.0, SIZE),
+        "icon-rotate": ["get", "bearing"],
+        "icon-rotation-alignment": "map",
+        "icon-pitch-alignment": "map",
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+      },
+    },
+    "containers",
+  );
+}
+
 function addModels() {
   addModelLayer({
     id: "locomotives",
@@ -1546,6 +1717,7 @@ map.on("load", async () => {
     },
   });
   addModels();
+  addSpotLabels();
   const groups = [...new Set(LAYERS.map((l) => l[0]))];
   sheet.innerHTML =
     '<div class="sec"><h4>Layers</h4><button class="link" id="all"></button></div>' +
