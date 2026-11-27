@@ -672,12 +672,17 @@ if "train_inset_m" in _tk.columns:  # optional field you can add in QGIS
     for _tid, _v in zip(_tk.track_id, _tk.train_inset_m):
         if not pd.isna(_v) and float(_v) >= 0:
             _insets[str(_tid)] = float(_v)
+# Track 5 (7205) should ONLY have locomotives at the north end.
+# Prevent the automatic "both ends" placement.
+_ends["7205"] = "north"
+
 _locos = build_locomotives(
     _tracks,
     [(g.x, g.y) for g in _cx.geometry if g is not None and not g.is_empty],
     _ends,
     _insets,
 )
+
 if _locos:
     from shapely.geometry import Point
 

@@ -14,8 +14,6 @@
 { "type": "Feature", "properties": { "track_id": "7204", "unit": 2, "train_end": "south", "heading_deg": 179.1, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3514091, 32.9917186 ] } },
 { "type": "Feature", "properties": { "track_id": "7205", "unit": 1, "train_end": "north", "heading_deg": 359.2, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3519073, 33.0060768 ] } },
 { "type": "Feature", "properties": { "track_id": "7205", "unit": 2, "train_end": "north", "heading_deg": 359.2, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3519078, 33.0058703 ] } },
-{ "type": "Feature", "properties": { "track_id": "7205", "unit": 1, "train_end": "south", "heading_deg": 182.6, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3519486, 32.9894364 ] } },
-{ "type": "Feature", "properties": { "track_id": "7205", "unit": 2, "train_end": "south", "heading_deg": 179.9, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3519367, 32.9896426 ] } },
 { "type": "Feature", "properties": { "track_id": "7206", "unit": 1, "train_end": "south", "heading_deg": 179.3, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3524404, 32.991819 ] } },
 { "type": "Feature", "properties": { "track_id": "7206", "unit": 2, "train_end": "south", "heading_deg": 179.3, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3524395, 32.9920255 ] } },
 { "type": "Feature", "properties": { "track_id": "7207", "unit": 1, "train_end": "north", "heading_deg": 359.1, "model": "sd60m" }, "geometry": { "type": "Point", "coordinates": [ -97.3524633, 33.0111649 ] } },
