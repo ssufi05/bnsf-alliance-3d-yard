@@ -545,6 +545,19 @@ LOCO_UNITS = 2  # locomotives per train
 LOCO_INSET = 15.0  # distance from the track end to the first unit (m)
 LOCO_CROSS_BUF = 8.0  # keep this far from any crossing (m)
 
+# WHERE EACH TRAIN STARTS: metres from the track end. Moves the locomotives and their well cars.
+TRAIN_INSET_M = {
+    "7201": 122.4,
+    "7202": 250.7,
+    "7203": 502.0,
+    "7204": 502.0,
+    "7205": 502.0,  # applies to the trains at both ends
+    "7206": 502.0,
+    "7207": 502.0,
+    "7208": 502.0,
+    "7209": 502.0,
+}
+
 
 def _poly_len(c):
     return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(c, c[1:]))
@@ -606,7 +619,8 @@ def build_locomotives(tracks, crossings, ends_override, inset_override=None):
             at_start = (end == "north") == north_is_start
             sign, s0 = (1, 0.0) if at_start else (-1, L)
             from_end = [abs(a - s0) for a in cross_along]
-            d, moved = inset_override.get(tid, LOCO_INSET), True
+            d = TRAIN_INSET_M.get(tid, inset_override.get(tid, LOCO_INSET))
+            moved = tid not in TRAIN_INSET_M  # table values are used exactly as typed
             while moved and d < L - span:
                 moved = False
                 for dc in from_end:
@@ -685,18 +699,49 @@ WELL_AVOID_CROSSINGS = (
     False  # True = leave blocks empty where they would sit on a crossing
 )
 WELL_CROSS_BUF = 8.0  # extra clearance around a crossing (m)
-WELL_BLOCKS = {}  # e.g. {"7203": 30} -> only 30 blocks on track 7203
+# HOW MANY WELL CARS ON EACH TRACK: edit these numbers. The models come in 3-car blocks,
+# so use multiples of 3. 0 = none. The scripts only read this table, they never change it.
+WELL_CARS = {
+    "7201": 80,  # Locomotive facing North
+    "7202": 81,  # Locomotive facing South
+    "7203": 84,
+    "7204": 72,  # Locomotive facing South
+    "7205": 81,  # Locomotive facing South
+    "7206": 72,  # Locomotive facing South
+    "7207": 90,  # Locomotive facing North
+    "7208": 81,  # Locomotive facing South
+    "7209": 87,  # Locomotive facing North
+}
+# WHERE THE WELL CARS BEGIN: extra metres behind the locomotives (0 = directly behind).
+WELL_OFFSET_M = {
+    "7201": 0.0,
+    "7202": 0.0,
+    "7203": 648.0,
+    "7204": 0.0,
+    "7205": 0.0,
+    "7206": 0.0,
+    "7207": 518.4,
+    "7208": 0.0,
+    "7209": 648.0,
+}
+WELL_NORTH_LIMIT = None  # positions are now set by the offsets and counts
 WELL_SKIP = {}  # e.g. {"7203": [10, 11]} -> leave blocks 10 and 11 empty on 7203
 
 
-def build_well_cars(tracks, locos, crossings, rng_):
+def build_well_cars(tracks, locos, crossings, north_limits):
     """One LINE per 3-car block, from its first to its last car, placed end to end behind the rear
-    locomotive of each train. Returns [{track_id, idx, owner, color, geometry}] (UTM metres)."""
+    locomotive of each train. Returns [{track_id, idx, owner, color, geometry}] (UTM metres).
+    north_limits: {track_id: northing}; blocks reaching north of it are left out and not counted."""
+    import zlib
+
     from shapely.geometry import LineString
 
     by_track = {}
     for r in locos:
         by_track.setdefault(r["track_id"], {}).setdefault(r["train_end"], []).append(r)
+    fallback = (  # for a track with no limit crossing of its own
+        sum(north_limits.values()) / len(north_limits) if north_limits else math.inf
+    )
     out = []
     for tid, coords in tracks:
         ends = by_track.get(tid)
@@ -714,7 +759,7 @@ def build_well_cars(tracks, locos, crossings, rng_):
         gap = (
             LOCO_LEN / 2 + LOCO_GAP
         )  # from the rear unit's centre to the first car body
-        first = rear + d * (gap + WELL_HALF)
+        first = rear + d * (gap + WELL_HALF + WELL_OFFSET_M.get(tid, 0.0))
         if len(trains) > 1:  # a train on the other end too (e.g. 7205): stop before it
             other = trains[-1] if mine == trains[0] else trains[0]
             limit = other[0] - d * gap
@@ -723,8 +768,13 @@ def build_well_cars(tracks, locos, crossings, rng_):
         cross_along = [
             s for s, dd in (_poly_project(coords, c) for c in crossings) if dd < 12.0
         ]
-        k = 0
-        while k < WELL_BLOCKS.get(tid, WELL_MAX):
+        cars = WELL_CARS.get(tid, WELL_MAX * 3)
+        if cars % 3:
+            print(
+                f"note: track {tid}: {cars} is not a multiple of 3 -> using {cars // 3 * 3}"
+            )
+        want, placed, k = cars // 3, 0, 0
+        while placed < want:
             c = first + d * k * WELL_BLOCK
             far = c + d * WELL_HALF
             if (d == 1 and far > limit) or (d == -1 and far < limit):
@@ -733,14 +783,17 @@ def build_well_cars(tracks, locos, crossings, rng_):
             blocked = WELL_AVOID_CROSSINGS and any(
                 lo - WELL_CROSS_BUF < s < hi + WELL_CROSS_BUF for s in cross_along
             )
-            if k not in WELL_SKIP.get(tid, []) and not blocked:
-                a, b, m = (
-                    _poly_pt(coords, lo),
-                    _poly_pt(coords, hi),
-                    _poly_pt(coords, c),
-                )
+            a, b, m = (
+                _poly_pt(coords, lo),
+                _poly_pt(coords, hi),
+                _poly_pt(coords, c),
+            )
+            north = max(a[1], b[1]) > north_limits.get(tid, fallback)
+            if k not in WELL_SKIP.get(tid, []) and not blocked and not north:
                 sx = (m[0] - (a[0] + b[0]) / 2) / 2
                 sy = (m[1] - (a[1] + b[1]) / 2) / 2
+                # seeded by track and position, so changing a count never reshuffles colors
+                rng_ = np.random.default_rng([11, zlib.crc32(tid.encode()), k])
                 owner, color = pick_unit(
                     53, rng_
                 )  # well cars run 53 ft intermodal boxes
@@ -755,15 +808,29 @@ def build_well_cars(tracks, locos, crossings, rng_):
                         ),
                     }
                 )
+                placed += 1
             k += 1
+        if tid in WELL_CARS and placed < want:
+            print(
+                f"WARNING: track {tid}: only {placed * 3} of {want * 3} well cars fit"
+            )
     return out
+
+
+_limits = {
+    str(t): g.y
+    for t, n, g in zip(_cx.track_id, _cx["name"], _cx.geometry)
+    if n == WELL_NORTH_LIMIT and g is not None and not g.is_empty
+}
+if WELL_NORTH_LIMIT and not _limits:
+    print(f"WARNING: no '{WELL_NORTH_LIMIT}' crossing found -> no north limit")
 
 
 _wells = build_well_cars(
     _tracks,
     _locos,
     [(g.x, g.y) for g in _cx.geometry if g is not None and not g.is_empty],
-    crng,  # reuse the same owner/color rng as the parked containers
+    _limits,
 )
 (
     gpd.GeoDataFrame(_wells, geometry="geometry", crs=UTM)
