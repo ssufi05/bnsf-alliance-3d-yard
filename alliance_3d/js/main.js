@@ -355,15 +355,6 @@ const LAYERS = [
     },
   ],
   [
-    "Light poles",
-    {
-      id: "lights",
-      type: "fill-extrusion",
-      source: "light_poles",
-      paint: exu(["get", "color"]),
-    },
-  ],
-  [
     "Power line",
     {
       id: "powerline",
@@ -1543,6 +1534,144 @@ async function addSpotLabels() {
   );
 }
 
+// ---- Light poles: commercial_lights.glb drawn at every pole position ----
+const LIGHT_HEIGHT_M = 30; // finished height of one light, in meters
+const LIGHT_ROTATION_DEG = 0; // turns every light; positive = clockwise
+
+async function addLightModels() {
+  let poles;
+  try {
+    const fc = await (
+      await fetch("data/light_poles.geojson?v=" + Date.now())
+    ).json();
+    // Each pole has one oval "ring" part; its center is the pole position.
+    poles = fc.features
+      .filter((f) => f.properties.part === "ring")
+      .map((f) => {
+        const pts = f.geometry.coordinates[0].slice(0, -1); // drop repeated end point
+        return [0, 1].map(
+          (i) => pts.reduce((t, p) => t + p[i], 0) / pts.length,
+        );
+      });
+  } catch (e) {
+    console.warn("light_poles.geojson not loaded", e);
+    return;
+  }
+  if (!poles.length) return;
+
+  const origin = poles[0];
+  const mc = maplibregl.MercatorCoordinate.fromLngLat(origin, 0);
+  const sc = mc.meterInMercatorCoordinateUnits();
+  const mLat = 111320,
+    mLng = 111320 * Math.cos((origin[1] * Math.PI) / 180);
+
+  const layer = {
+    id: "light-models",
+    type: "custom",
+    renderingMode: "3d",
+    visible: true,
+    onAdd(m, gl) {
+      this.camera = new THREE.Camera();
+      this.scene = new THREE.Scene();
+      this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 1.0));
+      const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+      sun.position.set(-40, 100, 60);
+      this.scene.add(sun);
+      this.renderer = new THREE.WebGLRenderer({
+        canvas: m.getCanvas(),
+        context: gl,
+        antialias: true,
+      });
+      this.renderer.autoClear = false;
+      this.renderer.outputEncoding = THREE.sRGBEncoding;
+
+      const dracoLoader = new THREE.DRACOLoader();
+      dracoLoader.setDecoderPath(
+        "https://www.gstatic.com/draco/versioned/decoders/1.5.6/",
+      );
+      const loader = new THREE.GLTFLoader();
+      loader.setDRACOLoader(dracoLoader);
+
+      loader.load(
+        "data/models/commercial_lights.glb",
+        (gltf) => {
+          gltf.scene.updateMatrixWorld(true);
+
+          // Measure the model, then center it, set its base on the ground and size it
+          const box = new THREE.Box3().setFromObject(gltf.scene);
+          const size = box.getSize(new THREE.Vector3());
+          const center = box.getCenter(new THREE.Vector3());
+          const s = LIGHT_HEIGHT_M / size.y;
+          const normalize = new THREE.Matrix4()
+            .makeScale(s, s, s)
+            .multiply(
+              new THREE.Matrix4().makeTranslation(
+                -center.x,
+                -box.min.y,
+                -center.z,
+              ),
+            );
+          console.log("commercial_lights.glb size (x, y, z):", size.toArray());
+
+          const dummy = new THREE.Object3D();
+          const matrix = new THREE.Matrix4();
+
+          // One instanced copy per mesh in the model, so 91 lights stay fast
+          gltf.scene.traverse((n) => {
+            if (!n.isMesh) return;
+            const im = new THREE.InstancedMesh(
+              n.geometry,
+              n.material,
+              poles.length,
+            );
+            im.frustumCulled = false;
+
+            poles.forEach(([lng, lat], i) => {
+              dummy.position.set(
+                (lng - origin[0]) * mLng,
+                0,
+                -(lat - origin[1]) * mLat,
+              );
+              dummy.rotation.y = -THREE.MathUtils.degToRad(LIGHT_ROTATION_DEG);
+              dummy.updateMatrix();
+              matrix
+                .copy(dummy.matrix)
+                .multiply(normalize)
+                .multiply(n.matrixWorld);
+              im.setMatrixAt(i, matrix);
+            });
+
+            this.scene.add(im);
+          });
+          m.triggerRepaint();
+        },
+        undefined,
+        (e) => console.error("commercial_lights.glb failed to load", e),
+      );
+    },
+    render(gl, matrix) {
+      if (!this.visible) return;
+      const l = new THREE.Matrix4()
+        .makeTranslation(mc.x, mc.y, mc.z)
+        .scale(new THREE.Vector3(sc, -sc, sc))
+        .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+      this.camera.projectionMatrix = new THREE.Matrix4()
+        .fromArray(matrix)
+        .multiply(l);
+      this.renderer.resetState();
+      this.renderer.render(this.scene, this.camera);
+    },
+  };
+  map.addLayer(layer);
+
+  sheet.addEventListener("change", (e) => {
+    if (e.target.id === "lights-t") {
+      layer.visible = e.target.checked;
+      map.triggerRepaint();
+    }
+  });
+}
+
 function addModels() {
   addModelLayer({
     id: "locomotives",
@@ -1572,6 +1701,7 @@ function addModels() {
   });
 
   addBarrierModels();
+  addLightModels();
 }
 
 map.on("load", async () => {
@@ -1684,6 +1814,7 @@ map.on("load", async () => {
     '<label class="row"><span>Locomotives</span><span class="sw-t"><input type="checkbox" id="loco-t" checked><i></i></span></label>' +
     '<label class="row"><span>Cranes</span><span class="sw-t"><input type="checkbox" id="crane-t" checked><i></i></span></label>' +
     '<label class="row"><span>Well cars</span><span class="sw-t"><input type="checkbox" id="wells-t" checked><i></i></span></label>' +
+    '<label class="row"><span>Light poles</span><span class="sw-t"><input type="checkbox" id="lights-t" checked><i></i></span></label>' +
     '<label class="row"><span>Jersey barriers</span><span class="sw-t"><input type="checkbox" id="barriers-t" checked><i></i></span></label>' +
     "<hr><div class='sec'><h4>Go to</h4></div>" +
     '<div class="chips"><button class="chip" data-v="yard">Whole yard</button><button class="chip" data-v="spots">Lot B</button><button class="chip" data-v="buildings">Buildings</button><button class="chip" data-v="water">Pond</button></div>' +
