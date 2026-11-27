@@ -606,7 +606,13 @@ const buildDronePath = async () => {
   DRONE_END = path[path.length - 1][0];
 };
 
-buildDronePath();
+// Build the drone flight path and handle loading failures.
+let dronePathError = null;
+
+const dronePathReady = buildDronePath().catch((error) => {
+  dronePathError = error;
+  console.error("Drone path failed to load:", error);
+});
 
 // smooth curve through the waypoints
 const droneCam = (t) => {
@@ -736,6 +742,36 @@ const startDrone = () => {
     essential: true,
   });
 };
+
+// ---- Drone button controls ----
+droneButton.addEventListener("click", async () => {
+  // Clicking again stops the current flight.
+  if (droneOn) {
+    stopDrone();
+    return;
+  }
+
+  // Prevent starting before the yard data is ready.
+  droneButton.disabled = true;
+
+  try {
+    await dronePathReady;
+
+    if (dronePathError || !DRONE_PATH || DRONE_PATH.length < 2) {
+      throw new Error("Drone flight path is unavailable.");
+    }
+
+    // Start the cinematic drone flight.
+    startDrone();
+  } catch (error) {
+    console.error("Drone flight could not start:", error);
+    alert(
+      "Drone flight could not start. Check the browser console for details.",
+    );
+  } finally {
+    droneButton.disabled = false;
+  }
+});
 
 // Manual map interaction interrupts the cinematic flight.
 ["mousedown", "wheel", "touchstart"].forEach((eventName) => {
