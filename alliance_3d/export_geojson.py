@@ -352,10 +352,11 @@ save(
 # using the same meters-per-degree math as index.html so the blocks line up with the tracks on screen.
 wc = read("well_cars")
 wc_rows = []
-for tid, idx, owner, color, g in (
+for tid, idx, car_type, owner, color, g in (
     zip(
         wc.to_crs(4326).track_id,
         wc.to_crs(4326).idx,
+        wc.to_crs(4326).car_type,
         wc.to_crs(4326).owner,
         wc.to_crs(4326).color,
         wc.to_crs(4326).geometry,
@@ -370,6 +371,7 @@ for tid, idx, owner, color, g in (
         {
             "track_id": tid,
             "idx": int(idx),
+            "car_type": car_type,
             "bearing_deg": round(brg, 2),
             "owner": owner,
             "color": color,
@@ -379,7 +381,7 @@ for tid, idx, owner, color, g in (
 save(
     gpd.GeoDataFrame(wc_rows, geometry="geometry", crs=4326) if wc_rows else wc,
     "well_cars",
-    ["track_id", "idx", "bearing_deg", "owner", "color"],
+    ["track_id", "idx", "car_type", "bearing_deg", "owner", "color"],
 )
 
 # ---- buildings: yours + OSM context (assumed heights) -----------------------

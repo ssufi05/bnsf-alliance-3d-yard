@@ -728,6 +728,56 @@ WELL_NORTH_LIMIT = None  # positions are now set by the offsets and counts
 WELL_SKIP = {}  # e.g. {"7203": [10, 11]} -> leave blocks 10 and 11 empty on 7203
 
 
+# SPINE CARS (carry trailers). One model = 5 platforms. They take the place of well cars,
+# so a train never gets longer than its WELL_CARS setting allows.
+#   a number  -> that many spine sets, mixed randomly between the well cars (0 = none)
+#   a list    -> exact positions, counted from the locomotives (1 = first), e.g. [3, 4, 9]
+SPINE_CARS = {
+    "7201": 4,
+    "7202": 0,
+    "7203": 10,
+    "7204": 3,
+    "7205": 0,
+    "7206": 8,
+    "7207": 2,
+    "7208": 5,
+    "7209": 0,
+}
+SPINE_BLOCK = 89.3  # slot length of one spine_car.glb (87.4 m model + gap)
+SPINE_SEED = 1  # change this number to reshuffle the random positions
+
+
+def train_plan(tid, blocks):
+    """Order of cars from the locomotives back, e.g. ['well', 'spine', 'well'].
+    blocks = train length in well car blocks; the result is never longer than that."""
+    import zlib
+
+    spine = SPINE_CARS.get(tid, 0)
+    exact = isinstance(spine, (list, tuple))
+    wanted = len(set(spine)) if exact else spine
+    budget = blocks * WELL_BLOCK
+    n_spine = min(wanted, int(budget / SPINE_BLOCK + 1e-6))
+    n_well = int((budget - n_spine * SPINE_BLOCK) / WELL_BLOCK + 1e-6)
+    total = n_spine + n_well
+    if exact:
+        spots = {p - 1 for p in spine if 1 <= p <= total}
+        # keep the train inside its length if some listed positions were out of range
+        total = len(spots) + int(
+            (budget - len(spots) * SPINE_BLOCK) / WELL_BLOCK + 1e-6
+        )
+        spots = {p for p in spots if p < total}
+    else:
+        pick = np.random.default_rng([SPINE_SEED, zlib.crc32(tid.encode())])
+        spots = (
+            set(pick.choice(total, n_spine, replace=False).tolist())
+            if n_spine
+            else set()
+        )
+    if len(spots) < wanted:
+        print(f"WARNING: track {tid}: only {len(spots)} of {wanted} spine sets fit")
+    return ["spine" if i in spots else "well" for i in range(total)]
+
+
 def build_well_cars(tracks, locos, crossings, north_limits):
     """One LINE per 3-car block, from its first to its last car, placed end to end behind the rear
     locomotive of each train. Returns [{track_id, idx, owner, color, geometry}] (UTM metres).
@@ -773,13 +823,19 @@ def build_well_cars(tracks, locos, crossings, north_limits):
             print(
                 f"note: track {tid}: {cars} is not a multiple of 3 -> using {cars // 3 * 3}"
             )
-        want, placed, k = cars // 3, 0, 0
-        while placed < want:
-            c = first + d * k * WELL_BLOCK
-            far = c + d * WELL_HALF
+            plan = train_plan(tid, cars // 3)
+        start = first - d * WELL_HALF  # front end of the first car
+        used = 0.0  # metres of train laid down so far
+        for k, car_type in enumerate(plan):
+            length = SPINE_BLOCK if car_type == "spine" else WELL_BLOCK
+            half = length / 2
+            c = start + d * (used + half)
+            far = c + d * half
             if (d == 1 and far > limit) or (d == -1 and far < limit):
+                print(f"WARNING: track {tid}: only {k} of {len(plan)} car blocks fit")
                 break
-            lo, hi = c - WELL_HALF, c + WELL_HALF
+            used += length
+            lo, hi = c - half, c + half
             blocked = WELL_AVOID_CROSSINGS and any(
                 lo - WELL_CROSS_BUF < s < hi + WELL_CROSS_BUF for s in cross_along
             )
@@ -801,6 +857,7 @@ def build_well_cars(tracks, locos, crossings, north_limits):
                     {
                         "track_id": tid,
                         "idx": k,
+                        "car_type": car_type,
                         "owner": owner,
                         "color": color,
                         "geometry": LineString(
@@ -808,12 +865,6 @@ def build_well_cars(tracks, locos, crossings, north_limits):
                         ),
                     }
                 )
-                placed += 1
-            k += 1
-        if tid in WELL_CARS and placed < want:
-            print(
-                f"WARNING: track {tid}: only {placed * 3} of {want * 3} well cars fit"
-            )
     return out
 
 
@@ -835,10 +886,14 @@ _wells = build_well_cars(
 (
     gpd.GeoDataFrame(_wells, geometry="geometry", crs=UTM)
     if _wells
-    else gpd.GeoDataFrame({"track_id": [], "idx": []}, geometry=[], crs=UTM)
+    else gpd.GeoDataFrame(
+        {"track_id": [], "idx": [], "car_type": []}, geometry=[], crs=UTM
+    )
 ).to_file(GPKG, layer="well_cars", driver="GPKG")
+_n_spine = sum(w["car_type"] == "spine" for w in _wells)
 print(
-    f"Well cars: {len(_wells)} blocks ({len(_wells) * 3} well cars) on {len(set(w['track_id'] for w in _wells))} tracks."
+    f"Rail cars: {len(_wells) - _n_spine} well car blocks and {_n_spine} spine car sets "
+    f"on {len(set(w['track_id'] for w in _wells))} tracks."
 )
 
 rows["end_spot"] = (

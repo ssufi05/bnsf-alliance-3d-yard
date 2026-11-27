@@ -251,7 +251,7 @@ const LAYERS = [
       minzoom: 16,
       layout: {
         "icon-image": "crossing_mark",
-        "icon-size": groundSize(3.2, 160),
+        "icon-size": groundSize(10, 160),
         "icon-rotate": ["get", "rotation_deg"],
         "icon-pitch-alignment": "map",
         "icon-rotation-alignment": "map",
@@ -889,7 +889,7 @@ async function addModelLayer({ id, glb, data, toggle, pose }) {
 }
 
 // One .glb drawn at many points, fast: merges the model's meshes by material, then draws every copy as an instance
-async function addInstancedLayer({ id, glb, data, toggle, pose }) {
+async function addInstancedLayer({ id, glb, data, toggle, pose, filter }) {
   let fc;
   try {
     fc = await (await fetch(data + "?v=" + Date.now())).json();
@@ -897,6 +897,7 @@ async function addInstancedLayer({ id, glb, data, toggle, pose }) {
     console.warn(data + " not loaded", e);
     return;
   }
+  if (filter) fc.features = fc.features.filter(filter);
   if (!fc.features.length) return;
   const origin = fc.features[0].geometry.coordinates;
   const mc = maplibregl.MercatorCoordinate.fromLngLat(origin, 0);
@@ -1611,7 +1612,6 @@ async function addLightModels() {
                 -center.z,
               ),
             );
-          console.log("commercial_lights.glb size (x, y, z):", size.toArray());
 
           const dummy = new THREE.Object3D();
           const matrix = new THREE.Matrix4();
@@ -1689,15 +1689,26 @@ function addModels() {
     toggle: "crane-t",
     pose: poseCrane,
   });
+  // Well cars and spine cars share one data file; car_type picks the model.
+  const railCarPose = (o, p) => {
+    // bearing_deg is the compass direction of the track; the model's long axis is X
+    o.rotation.y = THREE.MathUtils.degToRad(90 - p.bearing_deg);
+  };
   addInstancedLayer({
     id: "well-cars",
     glb: "data/models/well_cars.glb",
     data: "data/well_cars.geojson",
     toggle: "wells-t",
-    pose: (o, p) => {
-      // bearing_deg is the compass direction of the track; the model's long axis is X
-      o.rotation.y = THREE.MathUtils.degToRad(90 - p.bearing_deg);
-    },
+    pose: railCarPose,
+    filter: (f) => f.properties.car_type !== "spine",
+  });
+  addInstancedLayer({
+    id: "spine-cars",
+    glb: "data/models/spine_car.glb",
+    data: "data/well_cars.geojson",
+    toggle: "wells-t",
+    pose: railCarPose,
+    filter: (f) => f.properties.car_type === "spine",
   });
 
   addBarrierModels();
